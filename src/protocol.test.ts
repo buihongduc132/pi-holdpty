@@ -109,6 +109,17 @@ describe("typed encoders + decoders", () => {
     expect(decodeHello(decoded.payload)).toEqual(hello);
   });
 
+  it("HELLO encodes and decodes send mode", () => {
+    const hello = { mode: "send" as const, protocolVersion: 1 };
+    const frame = encodeHello(hello);
+    const decoder = new FrameDecoder();
+    const [decoded] = decoder.decode(frame);
+    expect(decoded.type).toBe(MSG.HELLO);
+    const parsed = decodeHello(decoded.payload);
+    expect(parsed.mode).toBe("send");
+    expect(parsed.protocolVersion).toBe(1);
+  });
+
   it("HELLO_ACK encodes and decodes", () => {
     const ack = { name: "worker1", cols: 120, rows: 40, mode: "attach" as const, pid: 12345 };
     const frame = encodeHelloAck(ack);
@@ -116,6 +127,16 @@ describe("typed encoders + decoders", () => {
     const [decoded] = decoder.decode(frame);
     expect(decoded.type).toBe(MSG.HELLO_ACK);
     expect(decodeHelloAck(decoded.payload)).toEqual(ack);
+  });
+
+  it("HELLO_ACK encodes and decodes send mode", () => {
+    const ack = { name: "worker1", cols: 120, rows: 40, mode: "send" as const, pid: 12345 };
+    const frame = encodeHelloAck(ack);
+    const decoder = new FrameDecoder();
+    const [decoded] = decoder.decode(frame);
+    expect(decoded.type).toBe(MSG.HELLO_ACK);
+    const parsed = decodeHelloAck(decoded.payload);
+    expect(parsed.mode).toBe("send");
   });
 
   it("REPLAY_END encodes empty", () => {
