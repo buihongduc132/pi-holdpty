@@ -23,7 +23,7 @@ import { TailBuffer } from "./line-filter.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type ClientMode = "attach" | "view" | "logs" | "wait";
+export type ClientMode = "attach" | "view" | "logs" | "wait" | "send";
 
 export interface ConnectOptions {
   name: string;
@@ -411,6 +411,37 @@ export async function logs(opts: LogsOptions): Promise<void> {
     await conn.done;
   }
   // Without --follow in logs mode, holder disconnects after REPLAY_END
+}
+
+// ── Send ───────────────────────────────────────────────────────────
+
+export interface SendOptions {
+  name: string;
+  /** Data to send to the session's PTY. */
+  data: Buffer;
+}
+
+/**
+ * Send input to a session without attaching.
+ *
+ * Unlike attach, send mode does NOT take an exclusive writer lock — multiple
+ * senders and an attached client can coexist. The data is written to the PTY
+ * and the connection is closed immediately.
+ *
+ * This is the programmatic equivalent of typing into the terminal.
+ */
+export async function send(opts: SendOptions): Promise<void> {
+  const conn = await connect({ name: opts.name, mode: "send" });
+  conn.socket.write(encodeDataIn(opts.data));
+  // Give the holder time to process the frame before disconnecting.
+  // Without this, the socket close can race with frame delivery on some
+  // platforms (especially Windows named pipes).
+  await new Promise<void>((resolve) => {
+    setTimeout(() => {
+      conn.socket.end();
+      resolve();
+    }, 50);
+  });
 }
 
 // ── Wait ───────────────────────────────────────────────────────────
