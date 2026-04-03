@@ -21,7 +21,7 @@ Core functionality — launch, attach, view, and manage detached PTY sessions.
 
 Extended functionality for automation and scripting.
 
-- [ ] `send` command (inject input without attaching)
+- [x] `send` command (inject input without attaching)
 - [ ] `wait` command (block until session ends, return exit code)
 - [ ] Resize propagation on attach (forward terminal resize to PTY)
 - [ ] `--size COLSxROWS` override on launch
