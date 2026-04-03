@@ -26,6 +26,21 @@ Read these before making architectural changes:
 - Types: `PascalCase`, functions: `camelCase`, constants: `UPPER_SNAKE`
 - Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
 
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `launch --bg` | Start session detached, return immediately |
+| `launch --fg` | Start session in foreground (blocks until child exits) |
+| `launch --wait` | Detached launch but blocks caller until child exits (returns exit code) |
+| `attach <session>` | Interactive connection (single-writer) |
+| `view <session>` | Read-only live stream (multiple viewers) |
+| `logs <session>` | Dump output buffer to stdout (`--tail`, `--follow`, `--no-replay`) |
+| `ls [--json]` | List active sessions (auto-cleans stale) |
+| `stop <session>` | Send SIGTERM to child process |
+| `info <session>` | Show session metadata as JSON |
+| `wait <session>` | Block until session's child exits, return its exit code |
+
 ## Key Architecture Rules
 
 1. **One holder process per session** — no central daemon, no shared state
@@ -34,6 +49,7 @@ Read these before making architectural changes:
 4. **Filesystem is the registry** — session directory has `.sock` + `.json` per session. No database.
 5. **Not a process manager** — lifecycle is the caller's problem (pm2, nohup, shell)
 6. **Stdout discipline** — `view` and `logs` output PTY data ONLY on stdout. Status/errors to stderr always.
+7. **Four connection modes** — `attach` (r/w, single writer), `view` (r/o, multi), `logs` (replay then close), `wait` (no data, blocks until EXIT). See `docs/PROTOCOL.md`.
 
 ## Testing
 
@@ -42,6 +58,7 @@ Cross-platform tests are critical. Test on Windows + Linux. Key areas:
 - Ring buffer (write, replay, overflow)
 - Protocol framing (encode/decode, partial reads)
 - PTY spawn + data relay (node-pty integration)
+- E2E tests (`src/e2e.test.ts`) — launch, attach, logs, wait, info, stop across platforms
 
 ## Common Pitfalls
 
