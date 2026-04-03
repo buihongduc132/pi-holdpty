@@ -155,6 +155,8 @@ Unlike `attach`, `send` does **not** take an exclusive writer lock. Multiple sen
 - CI/CD scripts that drive interactive sessions
 - Multi-agent systems sending notifications
 
+> **Note:** Concurrent senders have no ordering or atomicity guarantees. If multiple senders write simultaneously, their input may interleave. Callers should serialize sends if ordering matters.
+
 ## Detach Keybinding
 
 Default: **`Ctrl+A`** then **`d`** (same as GNU screen). Works on all keyboard layouts.

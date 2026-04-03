@@ -339,13 +339,8 @@ async function cmdSend(args: string[]): Promise<void> {
     } else if (arg === "--") {
       textStart = i + 1;
       break;
-    } else if (arg.startsWith("-")) {
-      if (!name) {
-        die(`Unknown send option: ${arg}`);
-      }
-      // After session name, non-flag args are text
-      textStart = i;
-      break;
+    } else if (!name && arg.startsWith("-")) {
+      die(`Unknown send option: ${arg}`);
     } else if (!name) {
       name = arg;
     } else {

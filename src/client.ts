@@ -433,14 +433,10 @@ export interface SendOptions {
 export async function send(opts: SendOptions): Promise<void> {
   const conn = await connect({ name: opts.name, mode: "send" });
   conn.socket.write(encodeDataIn(opts.data));
-  // Give the holder time to process the frame before disconnecting.
-  // Without this, the socket close can race with frame delivery on some
-  // platforms (especially Windows named pipes).
+  // Holder closes the connection after processing DATA_IN in send mode,
+  // so we just wait for the socket to close rather than guessing a timeout.
   await new Promise<void>((resolve) => {
-    setTimeout(() => {
-      conn.socket.end();
-      resolve();
-    }, 50);
+    conn.socket.on("close", resolve);
   });
 }
 

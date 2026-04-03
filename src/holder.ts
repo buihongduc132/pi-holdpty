@@ -387,6 +387,11 @@ export class Holder {
           } catch {
             // PTY may have closed
           }
+          // Send mode: close connection after writing — holder owns the close
+          // to avoid client-side timing races on Windows named pipes
+          if (client.mode === "send") {
+            client.socket.end();
+          }
         }
         break;
 
