@@ -7,7 +7,7 @@
  */
 
 import { Holder } from "./holder.js";
-import { attach, view, logs, waitForExit } from "./client.js";
+import { attach, view, logs, send, waitForExit } from "./client.js";
 import { listSessions, readMetadata, removeSession, isSessionActive } from "./session.js";
 import { getSessionDir } from "./platform.js";
 import { spawn } from "node:child_process";
@@ -28,6 +28,8 @@ Usage:
   holdpty attach <session>
   holdpty view <session>
   holdpty logs <session> [--tail N] [--follow] [--no-replay]
+  holdpty send <session> [--] <text>
+  holdpty send <session> --stdin
   holdpty wait <session>
   holdpty ls [--json]
   holdpty stop <session>
@@ -325,6 +327,53 @@ async function cmdStop(args: string[]): Promise<void> {
   process.stderr.write(`Stopped session "${name}" (PID ${meta.childPid})\n`);
 }
 
+async function cmdSend(args: string[]): Promise<void> {
+  let name: string | undefined;
+  let useStdin = false;
+  let textStart = -1;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--stdin") {
+      useStdin = true;
+    } else if (arg === "--") {
+      textStart = i + 1;
+      break;
+    } else if (!name && arg.startsWith("-")) {
+      die(`Unknown send option: ${arg}`);
+    } else if (!name) {
+      name = arg;
+    } else {
+      // First non-flag after session name — start of text
+      textStart = i;
+      break;
+    }
+  }
+
+  if (!name) die("send requires a session name");
+
+  let data: Buffer;
+
+  if (useStdin) {
+    if (textStart >= 0) die("--stdin and inline text are mutually exclusive");
+    // Read all of stdin
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk as Buffer);
+    }
+    data = Buffer.concat(chunks);
+    if (data.length === 0) die("no data received on stdin");
+  } else {
+    if (textStart < 0 || textStart >= args.length) {
+      die("send requires text to send (or --stdin to read from pipe)");
+    }
+    const text = args.slice(textStart).join(" ");
+    data = Buffer.from(text, "utf-8");
+  }
+
+  await send({ name, data });
+}
+
 async function cmdInfo(args: string[]): Promise<void> {
   const name = args[0];
   if (!name) die("info requires a session name");
@@ -373,6 +422,9 @@ async function main(): Promise<void> {
       break;
     case "logs":
       await cmdLogs(rest);
+      break;
+    case "send":
+      await cmdSend(rest);
       break;
     case "ls":
       await cmdLs(rest);
