@@ -527,3 +527,78 @@ describe("wait", () => {
     expect(r.exitCode).toBe(3);
   }, 25_000);
 });
+
+// ── launch --cols/--rows ──────────────────────────────────────────
+
+describe("launch --cols/--rows", () => {
+  it("--bg respects --cols and --rows in metadata", async () => {
+    const sessionName = await runCli(
+      ["launch", "--bg", "--cols", "200", "--rows", "50", "--name", "size-test", "--", NODE, "-e", "setTimeout(()=>{},30000)"],
+      testDir,
+    );
+    expect(sessionName.exitCode).toBe(0);
+
+    // Check metadata for the custom size
+    const info = await runCli(["info", "size-test"], testDir);
+    expect(info.exitCode).toBe(0);
+    const meta = JSON.parse(info.stdout);
+    expect(meta.cols).toBe(200);
+    expect(meta.rows).toBe(50);
+  }, 20_000);
+
+  it("--bg uses default size when --cols/--rows not provided", async () => {
+    const sessionName = await runCli(
+      ["launch", "--bg", "--name", "default-size", "--", NODE, "-e", "setTimeout(()=>{},30000)"],
+      testDir,
+    );
+    expect(sessionName.exitCode).toBe(0);
+
+    const info = await runCli(["info", "default-size"], testDir);
+    expect(info.exitCode).toBe(0);
+    const meta = JSON.parse(info.stdout);
+    // Default is 120x40 from Holder.start()
+    expect(meta.cols).toBe(120);
+    expect(meta.rows).toBe(40);
+  }, 20_000);
+
+  it("--cols without value exits non-zero", async () => {
+    const r = await runCli(
+      ["launch", "--bg", "--cols"],
+      testDir,
+    );
+    expect(r.exitCode).not.toBe(0);
+  });
+
+  it("--cols with non-numeric value exits non-zero", async () => {
+    const r = await runCli(
+      ["launch", "--bg", "--cols", "abc", "--", NODE, "-e", "process.exit(0)"],
+      testDir,
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("--cols requires a positive integer");
+  });
+
+  it("--rows with zero exits non-zero", async () => {
+    const r = await runCli(
+      ["launch", "--bg", "--rows", "0", "--", NODE, "-e", "process.exit(0)"],
+      testDir,
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("--rows requires a positive integer");
+  });
+
+  it("--wait respects --cols and --rows", async () => {
+    // Launch with --wait so we can verify the PTY sees the right size
+    // The child script queries its terminal size and prints it
+    const r = await runCli(
+      ["launch", "--wait", "--cols", "150", "--rows", "35", "--name", "size-wait", "--",
+        NODE, "-e", `process.stdout.write(process.stdout.columns + "x" + process.stdout.rows); process.exit(0);`],
+      testDir,
+      { timeout: 20_000 },
+    );
+    expect(r.exitCode).toBe(0);
+    // stdout contains session name on first line, then PTY output
+    // The child runs in a PTY, so stdout.columns/rows reflect the PTY size
+    expect(r.stdout).toContain("150x35");
+  }, 25_000);
+});
