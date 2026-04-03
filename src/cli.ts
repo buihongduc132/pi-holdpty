@@ -24,7 +24,7 @@ function usage(): string {
   return `holdpty v${VERSION} — Minimal cross-platform detached PTY
 
 Usage:
-  holdpty launch --bg|--fg|--wait [--name <name>] [--] <command> [args...]
+  holdpty launch --bg|--fg|--wait [--name <name>] [--cols N] [--rows N] [--] <command> [args...]
   holdpty attach <session>
   holdpty view <session>
   holdpty logs <session> [--tail N] [--follow] [--no-replay]
@@ -47,6 +47,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
   let bg = false;
   let wait = false;
   let name: string | undefined;
+  let cols: number | undefined;
+  let rows: number | undefined;
   let cmdStart = -1;
 
   for (let i = 0; i < args.length; i++) {
@@ -59,6 +61,12 @@ async function cmdLaunch(args: string[]): Promise<void> {
       wait = true;
     } else if (arg === "--name" && i + 1 < args.length) {
       name = args[++i];
+    } else if (arg === "--cols" && i + 1 < args.length) {
+      cols = parseInt(args[++i], 10);
+      if (isNaN(cols) || cols < 1) die("--cols requires a positive integer");
+    } else if (arg === "--rows" && i + 1 < args.length) {
+      rows = parseInt(args[++i], 10);
+      if (isNaN(rows) || rows < 1) die("--rows requires a positive integer");
     } else if (arg === "--") {
       cmdStart = i + 1;
       break;
@@ -95,6 +103,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
       [
         thisFile, "__holder",
         ...(name ? ["--name", name] : []),
+        ...(cols != null ? ["--cols", String(cols)] : []),
+        ...(rows != null ? ["--rows", String(rows)] : []),
         "--ready-file", readyFile,
         "--", ...command,
       ],
@@ -133,8 +143,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
     const holder = await Holder.start({
       command,
       name,
-      cols: process.stdout.columns || undefined,
-      rows: process.stdout.rows || undefined,
+      cols: cols ?? (process.stdout.columns || undefined),
+      rows: rows ?? (process.stdout.rows || undefined),
     });
     process.stdout.write(holder.sessionName + "\n");
     const code = await holder.pipeStdio();
@@ -148,6 +158,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
 async function cmdHolder(args: string[]): Promise<void> {
   let name: string | undefined;
   let readyFile: string | undefined;
+  let cols: number | undefined;
+  let rows: number | undefined;
   let cmdStart = -1;
 
   for (let i = 0; i < args.length; i++) {
@@ -155,6 +167,10 @@ async function cmdHolder(args: string[]): Promise<void> {
       name = args[++i];
     } else if (args[i] === "--ready-file" && i + 1 < args.length) {
       readyFile = args[++i];
+    } else if (args[i] === "--cols" && i + 1 < args.length) {
+      cols = parseInt(args[++i], 10);
+    } else if (args[i] === "--rows" && i + 1 < args.length) {
+      rows = parseInt(args[++i], 10);
     } else if (args[i] === "--") {
       cmdStart = i + 1;
       break;
@@ -164,7 +180,7 @@ async function cmdHolder(args: string[]): Promise<void> {
   if (cmdStart < 0) die("__holder requires -- <command>");
   const command = args.slice(cmdStart);
 
-  const holder = await Holder.start({ command, name });
+  const holder = await Holder.start({ command, name, cols, rows });
 
   // Signal the parent that we're ready by writing session name to the ready file
   if (readyFile) {
