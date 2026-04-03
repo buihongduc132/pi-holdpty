@@ -32,7 +32,7 @@ All multi-byte integers are big-endian.
 2. Client sends `HELLO`:
    ```json
    {
-     "mode": "attach" | "view" | "logs" | "wait",
+     "mode": "attach" | "view" | "logs" | "wait" | "send",
      "protocolVersion": 1
    }
    ```
@@ -45,7 +45,7 @@ All multi-byte integers are big-endian.
      "name": "worker1",
      "cols": 120,
      "rows": 40,
-     "mode": "attach" | "view" | "logs" | "wait",
+     "mode": "attach" | "view" | "logs" | "wait" | "send",
      "pid": 12345
    }
    ```
@@ -105,6 +105,20 @@ Client                          Holder
 ```
 
 Use `wait` mode when you need the child's exit code without consuming PTY output. No `DATA_OUT` frames are sent to wait clients. If the child has already exited when the client connects, `EXIT` is sent immediately after `REPLAY_END`.
+
+### send mode (write-only, non-exclusive)
+```
+Client                          Holder
+  │                               │
+  │──── HELLO {mode:"send"} ─────►│
+  │◄─── HELLO_ACK ───────────────│
+  │◄─── REPLAY_END ──────────────│  (no buffer replay)
+  │                               │
+  │──── DATA_IN ─────────────────►│  (written to PTY)
+  │         [holder closes conn]   │
+```
+
+Send mode injects input into a session's PTY without taking an exclusive writer lock. Unlike `attach`, multiple send clients can coexist with each other, an attached client, and viewers simultaneously. The holder closes the connection after processing the `DATA_IN` frame. If the child has already exited, the holder sends `ERROR` and closes immediately after handshake.
 
 ## Error Handling
 

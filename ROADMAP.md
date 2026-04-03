@@ -9,32 +9,40 @@ Core functionality — launch, attach, view, and manage detached PTY sessions.
 - [x] Binary wire protocol (8 message types, length-prefixed frames)
 - [x] `attach` command (single-writer, buffer replay, detach keybinding)
 - [x] `view` command (read-only, multiple simultaneous viewers)
-- [x] `logs` command (dump buffer to stdout, exit)
+- [x] `logs` command (dump buffer to stdout, exit; `--tail N`, `--follow`, `--no-replay`)
 - [x] `ls` command (list sessions, stale detection + auto-cleanup, --json)
 - [x] `stop` command (SIGTERM to child + holder)
 - [x] `info` command (session metadata as JSON)
+- [x] `wait` command (block until session ends, return exit code)
+- [x] `--wait` flag on `launch` (launch + wait in one step)
+- [x] `HOLDPTY_LINGER_MS` env var (configurable holder shutdown delay)
 - [x] Ring buffer (1MB, raw terminal bytes)
 - [x] Cross-platform: Windows 10+ (ConPTY) + Linux (forkpty)
-- [x] Test suite: 69 tests (unit, integration, E2E)
+- [x] Test suite: ~109 E2E tests plus unit and integration tests
 
 ## Phase 2: Polish
 
 Extended functionality for automation and scripting.
 
-- [ ] `send` command (inject input without attaching)
-- [ ] `wait` command (block until session ends, return exit code)
+- [ ] `send` command — inject input without attaching (open PR #4)
+- [x] `--cols`/`--rows` override on launch
 - [ ] Resize propagation on attach (forward terminal resize to PTY)
-- [ ] `--size COLSxROWS` override on launch
 - [ ] `--signal` option for stop
 - [ ] `--timeout` for launch (auto-kill after duration)
 
 ## Phase 3: Distribution & Ecosystem
 
 - [ ] Node SEA or pkg standalone binary (no npm install required)
-- [ ] Configurable buffer size
+- [ ] Configurable buffer size (if raised above 1MB, revisit client-side `--tail` filtering — keeping it client-side is only correct while the ring buffer fits comfortably in memory)
 - [ ] macOS testing and prebuilds
 - [ ] VHS integration examples and documentation
 - [ ] pm2 integration guide
+- [ ] `bun` SFE, https://bun.com/docs/bundler/executables
+
+
+## Known Limitations
+
+- **Orphaned ANSI color state on `--tail`**: When `--tail N` skips replay frames, the terminal may miss SGR (color/style) escape sequences that opened before the tail window. The output can render with incorrect colors. This matches Unix `tail` behavior and is inherent to client-side filtering without a VT parser — not a bug, not fixable without violating the "no terminal state machine" principle.
 
 ## Known Issues
 

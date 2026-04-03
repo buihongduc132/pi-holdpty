@@ -51,7 +51,7 @@ export interface HolderOptions {
 interface ClientConnection {
   socket: Socket;
   decoder: FrameDecoder;
-  mode: "attach" | "view" | "logs" | "wait" | null; // null = pre-handshake
+  mode: "attach" | "view" | "logs" | "wait" | "send" | null; // null = pre-handshake
 }
 
 // ── Holder ─────────────────────────────────────────────────────────
@@ -348,8 +348,8 @@ export class Holder {
       });
       client.socket.write(ack);
 
-      // Replay buffer (skip for wait mode — wait clients only care about exit)
-      if (hello.mode !== "wait") {
+      // Replay buffer (skip for wait and send modes)
+      if (hello.mode !== "wait" && hello.mode !== "send") {
         const bufData = this.ringBuffer.read();
         if (bufData.length > 0) {
           client.socket.write(encodeDataOut(bufData));
@@ -365,8 +365,13 @@ export class Holder {
       }
 
       // If child already exited, send EXIT (applies to attach, view, and wait)
+      // Send mode clients get an error instead — can't send to a dead session
       if (this.childExited && hello.mode !== "logs") {
-        client.socket.write(encodeExit(this.childExitCode ?? -1));
+        if (hello.mode === "send") {
+          this.sendError(client.socket, `Session "${this.name}" has already exited`);
+        } else {
+          client.socket.write(encodeExit(this.childExitCode ?? -1));
+        }
         client.socket.end();
       }
 
@@ -376,11 +381,16 @@ export class Holder {
     // Post-handshake: handle data frames
     switch (frame.type) {
       case MSG.DATA_IN:
-        if (client.mode === "attach") {
+        if (client.mode === "attach" || client.mode === "send") {
           try {
             this.ptyProcess.write(frame.payload.toString("utf-8"));
           } catch {
             // PTY may have closed
+          }
+          // Send mode: close connection after writing — holder owns the close
+          // to avoid client-side timing races on Windows named pipes
+          if (client.mode === "send") {
+            client.socket.end();
           }
         }
         break;

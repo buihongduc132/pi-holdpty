@@ -67,6 +67,7 @@ holdpty stop worker1
 | `attach <session>` | Interactive connection (single-writer) | Terminal takeover |
 | `view <session>` | Read-only live stream (multiple viewers) | PTY data only |
 | `logs <session>` | Dump output buffer to stdout, exit (supports `--tail`, `--follow`, `--no-replay`) | PTY data only |
+| `send <session> <text>` | Inject input without attaching (non-exclusive) | Nothing |
 | `ls [--json]` | List active sessions (auto-cleans stale) | Session list |
 | `stop <session>` | Send SIGTERM to child process | Confirmation (stderr) |
 | `info <session>` | Show session metadata | JSON |
@@ -136,6 +137,26 @@ holdpty logs worker1 -f --no-replay
 holdpty logs worker1 --tail 20 | grep ERROR
 ```
 
+### Send (for automation and orchestration)
+
+```bash
+# Send text to a session without attaching (like tmux send-keys)
+holdpty send worker1 "npm test"
+
+# Send from a pipe
+echo "exit" | holdpty send worker1 --stdin
+
+# Multiple senders can run concurrently — no exclusive lock
+# Works even while someone is attached or viewing
+```
+
+Unlike `attach`, `send` does **not** take an exclusive writer lock. Multiple senders, an attached client, and viewers can all coexist. This makes `send` ideal for:
+- Orchestration tools injecting commands programmatically
+- CI/CD scripts that drive interactive sessions
+- Multi-agent systems sending notifications
+
+> **Note:** Concurrent senders have no ordering or atomicity guarantees. If multiple senders write simultaneously, their input may interleave. Callers should serialize sends if ordering matters.
+
 ## Detach Keybinding
 
 Default: **`Ctrl+A`** then **`d`** (same as GNU screen). Works on all keyboard layouts.
@@ -180,6 +201,7 @@ Sessions are regular processes — they don't daemonize themselves. Use `--bg` f
 | `attach` | Child's exit code if child exits while attached; 0 on detach |
 | `view` | 0 |
 | `logs` | 0 |
+| `send` | 0 if data sent; 1 if session not found or dead |
 | `stop` | 0 if signal sent |
 
 ## What holdpty is NOT

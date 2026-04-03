@@ -7,7 +7,7 @@
  */
 
 import { Holder } from "./holder.js";
-import { attach, view, logs, waitForExit } from "./client.js";
+import { attach, view, logs, send, waitForExit } from "./client.js";
 import { listSessions, readMetadata, removeSession, isSessionActive } from "./session.js";
 import { getSessionDir } from "./platform.js";
 import { spawn } from "node:child_process";
@@ -24,10 +24,12 @@ function usage(): string {
   return `holdpty v${VERSION} — Minimal cross-platform detached PTY
 
 Usage:
-  holdpty launch --bg|--fg|--wait [--name <name>] [--] <command> [args...]
+  holdpty launch --bg|--fg|--wait [--name <name>] [--cols N] [--rows N] [--] <command> [args...]
   holdpty attach <session>
   holdpty view <session>
   holdpty logs <session> [--tail N] [--follow] [--no-replay]
+  holdpty send <session> [--] <text>
+  holdpty send <session> --stdin
   holdpty wait <session>
   holdpty ls [--json]
   holdpty stop <session>
@@ -47,6 +49,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
   let bg = false;
   let wait = false;
   let name: string | undefined;
+  let cols: number | undefined;
+  let rows: number | undefined;
   let cmdStart = -1;
 
   for (let i = 0; i < args.length; i++) {
@@ -59,6 +63,12 @@ async function cmdLaunch(args: string[]): Promise<void> {
       wait = true;
     } else if (arg === "--name" && i + 1 < args.length) {
       name = args[++i];
+    } else if (arg === "--cols" && i + 1 < args.length) {
+      cols = parseInt(args[++i], 10);
+      if (isNaN(cols) || cols < 1) die("--cols requires a positive integer");
+    } else if (arg === "--rows" && i + 1 < args.length) {
+      rows = parseInt(args[++i], 10);
+      if (isNaN(rows) || rows < 1) die("--rows requires a positive integer");
     } else if (arg === "--") {
       cmdStart = i + 1;
       break;
@@ -95,6 +105,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
       [
         thisFile, "__holder",
         ...(name ? ["--name", name] : []),
+        ...(cols != null ? ["--cols", String(cols)] : []),
+        ...(rows != null ? ["--rows", String(rows)] : []),
         "--ready-file", readyFile,
         "--", ...command,
       ],
@@ -133,8 +145,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
     const holder = await Holder.start({
       command,
       name,
-      cols: process.stdout.columns || undefined,
-      rows: process.stdout.rows || undefined,
+      cols: cols ?? (process.stdout.columns || undefined),
+      rows: rows ?? (process.stdout.rows || undefined),
     });
     process.stdout.write(holder.sessionName + "\n");
     const code = await holder.pipeStdio();
@@ -148,6 +160,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
 async function cmdHolder(args: string[]): Promise<void> {
   let name: string | undefined;
   let readyFile: string | undefined;
+  let cols: number | undefined;
+  let rows: number | undefined;
   let cmdStart = -1;
 
   for (let i = 0; i < args.length; i++) {
@@ -155,6 +169,10 @@ async function cmdHolder(args: string[]): Promise<void> {
       name = args[++i];
     } else if (args[i] === "--ready-file" && i + 1 < args.length) {
       readyFile = args[++i];
+    } else if (args[i] === "--cols" && i + 1 < args.length) {
+      cols = parseInt(args[++i], 10);
+    } else if (args[i] === "--rows" && i + 1 < args.length) {
+      rows = parseInt(args[++i], 10);
     } else if (args[i] === "--") {
       cmdStart = i + 1;
       break;
@@ -164,7 +182,7 @@ async function cmdHolder(args: string[]): Promise<void> {
   if (cmdStart < 0) die("__holder requires -- <command>");
   const command = args.slice(cmdStart);
 
-  const holder = await Holder.start({ command, name });
+  const holder = await Holder.start({ command, name, cols, rows });
 
   // Signal the parent that we're ready by writing session name to the ready file
   if (readyFile) {
@@ -309,6 +327,53 @@ async function cmdStop(args: string[]): Promise<void> {
   process.stderr.write(`Stopped session "${name}" (PID ${meta.childPid})\n`);
 }
 
+async function cmdSend(args: string[]): Promise<void> {
+  let name: string | undefined;
+  let useStdin = false;
+  let textStart = -1;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--stdin") {
+      useStdin = true;
+    } else if (arg === "--") {
+      textStart = i + 1;
+      break;
+    } else if (!name && arg.startsWith("-")) {
+      die(`Unknown send option: ${arg}`);
+    } else if (!name) {
+      name = arg;
+    } else {
+      // First non-flag after session name — start of text
+      textStart = i;
+      break;
+    }
+  }
+
+  if (!name) die("send requires a session name");
+
+  let data: Buffer;
+
+  if (useStdin) {
+    if (textStart >= 0) die("--stdin and inline text are mutually exclusive");
+    // Read all of stdin
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk as Buffer);
+    }
+    data = Buffer.concat(chunks);
+    if (data.length === 0) die("no data received on stdin");
+  } else {
+    if (textStart < 0 || textStart >= args.length) {
+      die("send requires text to send (or --stdin to read from pipe)");
+    }
+    const text = args.slice(textStart).join(" ");
+    data = Buffer.from(text, "utf-8");
+  }
+
+  await send({ name, data });
+}
+
 async function cmdInfo(args: string[]): Promise<void> {
   const name = args[0];
   if (!name) die("info requires a session name");
@@ -357,6 +422,9 @@ async function main(): Promise<void> {
       break;
     case "logs":
       await cmdLogs(rest);
+      break;
+    case "send":
+      await cmdSend(rest);
       break;
     case "ls":
       await cmdLs(rest);
