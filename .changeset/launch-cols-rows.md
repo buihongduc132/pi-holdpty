@@ -12,4 +12,4 @@ Now you can specify the initial PTY dimensions directly:
 holdpty launch --bg --cols 200 --rows 50 -- /bin/zsh
 ```
 
-In `--fg` mode, explicit `--cols`/`--rows` override the auto-detected terminal size.
+In `--fg` mode with non-TTY stdin, explicit `--cols`/`--rows` set the initial PTY size. In interactive `--fg` sessions, the terminal's actual size takes precedence via resize propagation.

@@ -143,8 +143,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
     const holder = await Holder.start({
       command,
       name,
-      cols: cols ?? process.stdout.columns ?? undefined,
-      rows: rows ?? process.stdout.rows ?? undefined,
+      cols: cols ?? (process.stdout.columns || undefined),
+      rows: rows ?? (process.stdout.rows || undefined),
     });
     process.stdout.write(holder.sessionName + "\n");
     const code = await holder.pipeStdio();

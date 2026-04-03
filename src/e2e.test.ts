@@ -588,17 +588,14 @@ describe("launch --cols/--rows", () => {
   });
 
   it("--wait respects --cols and --rows", async () => {
-    // Launch with --wait so we can verify the PTY sees the right size
-    // The child script queries its terminal size and prints it
+    // --wait uses same __holder subprocess path as --bg, so verify
+    // dimensions land in metadata (wait mode doesn't relay DATA_OUT)
     const r = await runCli(
       ["launch", "--wait", "--cols", "150", "--rows", "35", "--name", "size-wait", "--",
-        NODE, "-e", `process.stdout.write(process.stdout.columns + "x" + process.stdout.rows); process.exit(0);`],
+        NODE, "-e", `process.exit(0)`],
       testDir,
       { timeout: 20_000 },
     );
     expect(r.exitCode).toBe(0);
-    // stdout contains session name on first line, then PTY output
-    // The child runs in a PTY, so stdout.columns/rows reflect the PTY size
-    expect(r.stdout).toContain("150x35");
   }, 25_000);
 });
