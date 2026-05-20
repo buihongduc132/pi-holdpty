@@ -168,6 +168,10 @@ export interface WatcherPipelineOptions {
 export function createWatcherPipeline(opts: WatcherPipelineOptions): WatcherFilter {
   const { session, patterns, debounceMs, maxBufferBytes, writer, exitOnPattern, onExit } = opts;
 
+  // Guard against re-entrant flush: flush() triggers onEvent for buffered
+  // entries, which may match exitOnPattern and call flush() again.
+  let exitTriggered = false;
+
   const filter = new WatcherFilter({
     session,
     patterns,
@@ -179,10 +183,12 @@ export function createWatcherPipeline(opts: WatcherPipelineOptions): WatcherFilt
       // Check --exit-on: if a match event's line matches the exitOn regex
       if (
         exitOnPattern &&
+        !exitTriggered &&
         event.kind === "match" &&
         exitOnPattern.test(event.line)
       ) {
-        // Flush and signal exit
+        exitTriggered = true;
+        // Flush remaining buffered events and signal exit
         filter.flush();
         onExit?.();
       }

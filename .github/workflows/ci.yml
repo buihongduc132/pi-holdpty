@@ -1,14 +1,50 @@
+# pi-holdpty CI — pi-package convention
+#
+# Trigger: push to main, pull_request.
+# Jobs:
+#   verify    — typecheck + test:coverage + smoke-test (Ubuntu + macOS matrix)
+#   package-dry-run — npm pack
+#   publish   — npm publish on main if version bumped
+#
+# Required secret: NPM_TOKEN (npm automation token).
+# Add via: gh secret set NPM_TOKEN --repo buihongduc132/pi-holdpty
+
 name: CI
 
 on:
   push:
-    branches: [develop, main]
+    branches: [main]
   pull_request:
-    branches: [develop, main]
 
 jobs:
-  lint:
-    name: Lint
+  verify:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run test:coverage
+      - name: Smoke test
+        run: npm run smoke-test
+        timeout-minutes: 3
+        env:
+          HOLDPTY_LINGER_MS: '200'
+      - name: Kill orphan holders
+        if: always()
+        shell: bash
+        run: pkill -f "__holder" || true
+
+  package-dry-run:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,40 +52,33 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npm run lint
+      - run: npm run build
+      - run: npm pack --dry-run
 
-  test:
-    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: ['20', '22']
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+  publish:
+    needs: package-dry-run
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 22
+          registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
-
-      - name: Unit + integration tests
-        run: npx vitest run src/platform.test.ts src/ring-buffer.test.ts src/protocol.test.ts src/integration.test.ts src/line-filter.test.ts --reporter=verbose
-
-      - name: E2E tests
-        run: npx vitest run src/e2e.test.ts --reporter=verbose
-        timeout-minutes: 10
-        env:
-          HOLDPTY_LINGER_MS: '200'
-
-      - name: Kill orphan holders
-        if: always()
-        shell: bash
+      - name: Check version bump
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            taskkill //F //FI "IMAGENAME eq node.exe" 2>/dev/null || true
-          else
-            pkill -f "__holder" || true
+          CURRENT=$(npm view pi-holdpty version 2>/dev/null || echo "0.0.0")
+          LOCAL=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" = "$LOCAL" ]; then
+            echo "Version $LOCAL already published — skipping."
+            exit 1
           fi
+          echo "Publishing $LOCAL (current on npm: $CURRENT)"
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
