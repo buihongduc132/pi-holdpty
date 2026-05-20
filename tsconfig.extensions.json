@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["extensions/**/*"],
+  "exclude": ["node_modules", "dist", "extensions/**/*.test.ts", "extensions/**/*.bench.ts"]
+}
