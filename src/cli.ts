@@ -18,6 +18,19 @@ import { parseWatchArgs, parseTailEventsArgs, createWatcherPipeline } from "./cl
 import { NdjsonWriter, makeExitEvent } from "./event-stream.js";
 import { compilePatterns, compilePattern } from "./watcher-filter.js";
 import { FrameDecoder, MSG, decodeExit } from "./protocol.js";
+import {
+  readFullMetadata,
+  writeFullMetadata,
+  enforceOwnership,
+  touchInteraction,
+  resolveSessionId,
+  createOwnershipMetadata,
+  lockedClaim,
+  lockedRelease,
+  isProcessAlive,
+  OwnershipError,
+} from "./ownership.js";
+import { checkStaleness, checkAndEmitStaleWarning, parseDuration } from "./staleness.js";
 
 // Read version from package.json at build time — keep in sync
 const VERSION = "0.5.0";
@@ -28,7 +41,7 @@ function usage(): string {
   return `holdpty v${VERSION} — Pi-flavored detached PTY (fork of marcfargas/holdpty)
 
 Usage:
-  holdpty launch --bg|--fg|--wait [--name <name>] [--cols N] [--rows N] [--] <command> [args...]
+  holdpty launch --bg|--fg|--wait [--name <name>] [--cols N] [--rows N] [--stale-after <dur>] [--] <command> [args...]
   holdpty attach <session>
   holdpty view <session>
   holdpty logs <session> [--tail N] [--follow] [--no-replay]
@@ -37,8 +50,10 @@ Usage:
   holdpty wait <session>
   holdpty watch <session> --pattern <regex> [--pattern <regex>]... [--label <name>]... [--debounce <ms>] [--max-buffer <bytes>] [--from <start|now>] [--exit-on <regex>]
   holdpty tail-events <session|--all> [--pattern <regex> --label <name>]...
+  holdpty claim <session> [--force]
+  holdpty release <session> [--force]
   holdpty ls [--json]
-  holdpty stop <session>
+  holdpty stop <session> [--force]
   holdpty info <session>
   holdpty --help | --version`;
 }
@@ -57,6 +72,7 @@ async function cmdLaunch(args: string[]): Promise<void> {
   let name: string | undefined;
   let cols: number | undefined;
   let rows: number | undefined;
+  let staleAfter: string | undefined;
   let cmdStart = -1;
 
   for (let i = 0; i < args.length; i++) {
@@ -69,6 +85,8 @@ async function cmdLaunch(args: string[]): Promise<void> {
       wait = true;
     } else if (arg === "--name" && i + 1 < args.length) {
       name = args[++i];
+    } else if (arg === "--stale-after" && i + 1 < args.length) {
+      staleAfter = args[++i];
     } else if (arg === "--cols" && i + 1 < args.length) {
       cols = parseInt(args[++i], 10);
       if (isNaN(cols) || cols < 1) die("--cols requires a positive integer");
@@ -230,6 +248,23 @@ async function cmdAttach(args: string[]): Promise<void> {
   const name = args[0];
   if (!name) die("attach requires a session name");
 
+  // Ownership check (R6)
+  const sessionId = resolveSessionId();
+  const fullMeta = readFullMetadata(name);
+  if (fullMeta) {
+    try {
+      enforceOwnership(fullMeta, sessionId, "attach");
+      touchInteraction(fullMeta, sessionId);
+      writeFullMetadata(fullMeta);
+    } catch (err) {
+      if (err instanceof OwnershipError) {
+        process.stderr.write(`Error: ${err.message}\n`);
+        process.exit(3);
+      }
+      // Non-ownership errors fall through to normal attach
+    }
+  }
+
   const code = await attach({ name });
   if (code !== null) {
     process.exit(code);
@@ -279,7 +314,22 @@ async function cmdLs(args: string[]): Promise<void> {
   const sessions = await listSessions({ clean: true });
 
   if (json) {
-    process.stdout.write(JSON.stringify(sessions, null, 2) + "\n");
+    // Enrich with R5 fields for each session
+    const enriched = sessions.map((s) => {
+      const fullMeta = readFullMetadata(s.name);
+      if (fullMeta) {
+        const staleness = checkStaleness(fullMeta);
+        return {
+          ...s,
+          metadata: fullMeta,
+          stale: staleness.stale,
+          orphaned: staleness.orphaned,
+          idle_for_ms: staleness.idle_for_ms,
+        };
+      }
+      return s;
+    });
+    process.stdout.write(JSON.stringify(enriched, null, 2) + "\n");
     return;
   }
 
@@ -302,7 +352,19 @@ async function cmdLs(args: string[]): Promise<void> {
 }
 
 async function cmdStop(args: string[]): Promise<void> {
-  const name = args[0];
+  let name: string | undefined;
+  let force = false;
+
+  for (const arg of args) {
+    if (arg === "--force") {
+      force = true;
+    } else if (!arg.startsWith("-") && !name) {
+      name = arg;
+    } else if (arg.startsWith("-")) {
+      die(`Unknown stop option: ${arg}`);
+    }
+  }
+
   if (!name) die("stop requires a session name");
 
   const meta = readMetadata(name);
@@ -313,6 +375,22 @@ async function cmdStop(args: string[]): Promise<void> {
     removeSession(name);
     process.stderr.write(`Session "${name}" is not running (cleaned stale files)\n`);
     return;
+  }
+
+  // Ownership check (R6)
+  if (!force) {
+    const sessionId = resolveSessionId();
+    const fullMeta = readFullMetadata(name);
+    if (fullMeta) {
+      try {
+        enforceOwnership(fullMeta, sessionId, "stop");
+      } catch (err) {
+        if (err instanceof OwnershipError) {
+          process.stderr.write(`Error: ${err.message}\nUse --force to override.\n`);
+          process.exit(3);
+        }
+      }
+    }
   }
 
   try {
@@ -357,6 +435,22 @@ async function cmdSend(args: string[]): Promise<void> {
   }
 
   if (!name) die("send requires a session name");
+
+  // Ownership check (R6)
+  const sessionId = resolveSessionId();
+  const fullMeta = readFullMetadata(name);
+  if (fullMeta) {
+    try {
+      enforceOwnership(fullMeta, sessionId, "send");
+      touchInteraction(fullMeta, sessionId);
+      writeFullMetadata(fullMeta);
+    } catch (err) {
+      if (err instanceof OwnershipError) {
+        process.stderr.write(`Error: ${err.message}\n`);
+        process.exit(3);
+      }
+    }
+  }
 
   let data: Buffer;
 
@@ -569,15 +663,108 @@ async function cmdTailEvents(args: string[]): Promise<void> {
   await new Promise(() => {});
 }
 
+async function cmdClaim(args: string[]): Promise<void> {
+  let name: string | undefined;
+  let force = false;
+
+  for (const arg of args) {
+    if (arg === "--force" || arg === "--force-claim") {
+      force = true;
+    } else if (!arg.startsWith("-") && !name) {
+      name = arg;
+    } else {
+      die(`Unknown claim option: ${arg}`);
+    }
+  }
+
+  if (!name) die("claim requires a session name");
+
+  const sessionId = resolveSessionId();
+  const meta = readFullMetadata(name);
+  if (!meta) die(`Session "${name}" not found`);
+
+  // Check staleness for non-force claims
+  const staleness = checkStaleness(meta);
+  const isStale = staleness.stale;
+
+  const result = lockedClaim(name, sessionId, { force, isStale });
+  if (!result.success) {
+    process.stderr.write(`Error: Session "${name}" is actively owned by ${meta.owner_session}. Use --force to override.\n`);
+    process.exit(3);
+  }
+
+  // Emit claim_change event to stdout (NDJSON)
+  if (result.event) {
+    const writer = new NdjsonWriter();
+    writer.write({
+      ts: new Date().toISOString(),
+      session: name,
+      kind: "claim_change",
+      from: result.event.from,
+      to: result.event.to,
+      force: result.event.force,
+    });
+  }
+
+  process.stderr.write(`Claimed session "${name}" (owner: ${sessionId}${force ? ", forced" : ""})\n`);
+}
+
+async function cmdRelease(args: string[]): Promise<void> {
+  let name: string | undefined;
+  let force = false;
+
+  for (const arg of args) {
+    if (arg === "--force") {
+      force = true;
+    } else if (!arg.startsWith("-") && !name) {
+      name = arg;
+    } else {
+      die(`Unknown release option: ${arg}`);
+    }
+  }
+
+  if (!name) die("release requires a session name");
+
+  const sessionId = resolveSessionId();
+  const result = lockedRelease(name, sessionId, { force });
+  if (!result.success) {
+    process.stderr.write(`Error: You are not the owner of session "${name}". Use --force to override.\n`);
+    process.exit(3);
+  }
+
+  // Emit claim_change event
+  if (result.event) {
+    const writer = new NdjsonWriter();
+    writer.write({
+      ts: new Date().toISOString(),
+      session: name,
+      kind: "claim_change",
+      from: result.event.from,
+      to: result.event.to,
+      force: result.event.force,
+    });
+  }
+
+  process.stderr.write(`Released session "${name}"\n`);
+}
+
 async function cmdInfo(args: string[]): Promise<void> {
   const name = args[0];
   if (!name) die("info requires a session name");
 
-  const meta = readMetadata(name);
-  if (!meta) die(`Session "${name}" not found`);
+  // Use full metadata with R5 fields
+  const fullMeta = readFullMetadata(name);
+  if (!fullMeta) die(`Session "${name}" not found`);
 
   const active = isSessionActive(name);
-  const info = { ...meta, active };
+  const staleness = checkStaleness(fullMeta);
+  const info = {
+    ...fullMeta,
+    active,
+    idle_for_ms: staleness.idle_for_ms,
+    stale: staleness.stale,
+    orphaned: staleness.orphaned,
+  };
   process.stdout.write(JSON.stringify(info, null, 2) + "\n");
 }
 
@@ -635,6 +822,12 @@ async function main(): Promise<void> {
       break;
     case "tail-events":
       await cmdTailEvents(rest);
+      break;
+    case "claim":
+      await cmdClaim(rest);
+      break;
+    case "release":
+      await cmdRelease(rest);
       break;
     default:
       die(`Unknown command: ${cmd}\nRun 'holdpty --help' for usage`);

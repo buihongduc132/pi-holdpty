@@ -32,6 +32,9 @@
     "conpty"
   ],
   "pi": {
+    "extensions": [
+      "./extensions"
+    ],
     "skills": [
       "./skills"
     ]
@@ -73,6 +76,13 @@
     "dist/cli-commands.js",
     "dist/cli-commands.js.map",
     "dist/cli-commands.d.ts",
+    "dist/ownership.js",
+    "dist/ownership.js.map",
+    "dist/ownership.d.ts",
+    "dist/staleness.js",
+    "dist/staleness.js.map",
+    "dist/staleness.d.ts",
+    "extensions/",
     "skills/",
     ".well-known/",
     "LICENSE",
