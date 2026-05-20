@@ -7,21 +7,25 @@
  */
 
 import { Holder } from "./holder.js";
-import { attach, view, logs, send, waitForExit } from "./client.js";
+import { attach, view, logs, send, waitForExit, connect } from "./client.js";
 import { listSessions, readMetadata, removeSession, isSessionActive } from "./session.js";
 import { getSessionDir } from "./platform.js";
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { parseWatchArgs, parseTailEventsArgs, createWatcherPipeline } from "./cli-commands.js";
+import { NdjsonWriter, makeExitEvent } from "./event-stream.js";
+import { compilePatterns, compilePattern } from "./watcher-filter.js";
+import { FrameDecoder, MSG, decodeExit } from "./protocol.js";
 
 // Read version from package.json at build time — keep in sync
-const VERSION = "0.3.0";
+const VERSION = "0.5.0";
 
 // ── Argument parsing ───────────────────────────────────────────────
 
 function usage(): string {
-  return `holdpty v${VERSION} — Minimal cross-platform detached PTY
+  return `holdpty v${VERSION} — Pi-flavored detached PTY (fork of marcfargas/holdpty)
 
 Usage:
   holdpty launch --bg|--fg|--wait [--name <name>] [--cols N] [--rows N] [--] <command> [args...]
@@ -31,6 +35,8 @@ Usage:
   holdpty send <session> [--] <text>
   holdpty send <session> --stdin
   holdpty wait <session>
+  holdpty watch <session> --pattern <regex> [--pattern <regex>]... [--label <name>]... [--debounce <ms>] [--max-buffer <bytes>] [--from <start|now>] [--exit-on <regex>]
+  holdpty tail-events <session|--all> [--pattern <regex> --label <name>]...
   holdpty ls [--json]
   holdpty stop <session>
   holdpty info <session>
@@ -374,6 +380,195 @@ async function cmdSend(args: string[]): Promise<void> {
   await send({ name, data });
 }
 
+async function cmdWatch(args: string[]): Promise<void> {
+  let parsed;
+  try {
+    parsed = parseWatchArgs(args);
+  } catch (e: any) {
+    die(e.message);
+  }
+
+  const writer = new NdjsonWriter();
+  const patternSpecs = compilePatterns(parsed.patterns, parsed.labels);
+  const exitOnRegex = parsed.exitOn ? compilePattern(parsed.exitOn) : undefined;
+
+  const sessions = parsed.all
+    ? (await listSessions({ clean: true })).map((s) => s.name)
+    : [parsed.session!];
+
+  if (sessions.length === 0) {
+    die("No active sessions found");
+  }
+
+  let exitRequested = false;
+  const filters: ReturnType<typeof createWatcherPipeline>[] = [];
+
+  for (const sessionName of sessions) {
+    const meta = readMetadata(sessionName);
+    if (!meta) die(`Session "${sessionName}" not found`);
+
+    const startedAt = Date.now();
+
+    const filter = createWatcherPipeline({
+      session: sessionName,
+      patterns: patternSpecs,
+      debounceMs: parsed.debounceMs,
+      maxBufferBytes: parsed.maxBufferBytes,
+      exitOnPattern: exitOnRegex,
+      writer,
+      onExit: () => {
+        exitRequested = true;
+        process.exit(0);
+      },
+    });
+    filters.push(filter);
+
+    // Connect to the session for live data
+    try {
+      const conn = await connect({
+        name: sessionName,
+        mode: parsed.from === "start" ? "view" : "view",
+        onReplayData: parsed.from === "start" ? (data) => filter.feed(data) : () => {},
+      });
+
+      // Stream live data through the filter
+      const decoder = new FrameDecoder();
+      conn.socket.on("data", (chunk: Buffer) => {
+        let frames;
+        try {
+          frames = decoder.decode(chunk);
+        } catch {
+          return;
+        }
+        for (const frame of frames) {
+          if (frame.type === MSG.DATA_OUT) {
+            filter.feed(frame.payload);
+          } else if (frame.type === MSG.EXIT) {
+            const { code } = decodeExit(frame.payload);
+            filter.flush();
+            const exitEvt = makeExitEvent({
+              session: sessionName,
+              exit_code: code,
+              duration_ms: Date.now() - startedAt,
+            });
+            writer.write(exitEvt);
+            if (!exitRequested) {
+              process.exit(code);
+            }
+          }
+        }
+      });
+
+      conn.socket.on("close", () => {
+        filter.flush();
+      });
+
+      conn.socket.on("error", () => {
+        filter.flush();
+        process.exit(1);
+      });
+    } catch (e: any) {
+      die(e.message);
+    }
+  }
+
+  // Clean shutdown on signals
+  const cleanup = () => {
+    for (const f of filters) f.flush();
+    process.exit(0);
+  };
+  process.on("SIGTERM", cleanup);
+  process.on("SIGINT", cleanup);
+
+  // Keep alive
+  await new Promise(() => {});
+}
+
+async function cmdTailEvents(args: string[]): Promise<void> {
+  let parsed;
+  try {
+    parsed = parseTailEventsArgs(args);
+  } catch (e: any) {
+    die(e.message);
+  }
+
+  const writer = new NdjsonWriter();
+  const patternSpecs = parsed.patterns.length > 0
+    ? compilePatterns(parsed.patterns, parsed.labels)
+    : [];
+
+  const sessions = parsed.all
+    ? (await listSessions({ clean: true })).map((s) => s.name)
+    : [parsed.session!];
+
+  if (sessions.length === 0 && !parsed.all) {
+    die("No session specified");
+  }
+
+  for (const sessionName of sessions) {
+    const meta = readMetadata(sessionName);
+    if (!meta) die(`Session "${sessionName}" not found`);
+
+    const startedAt = Date.now();
+
+    // If patterns are supplied, create a filter
+    const filter = patternSpecs.length > 0
+      ? createWatcherPipeline({
+          session: sessionName,
+          patterns: patternSpecs,
+          debounceMs: parsed.debounceMs,
+          maxBufferBytes: parsed.maxBufferBytes,
+          writer,
+        })
+      : null;
+
+    try {
+      const conn = await connect({
+        name: sessionName,
+        mode: "view",
+      });
+
+      const decoder = new FrameDecoder();
+      conn.socket.on("data", (chunk: Buffer) => {
+        let frames;
+        try {
+          frames = decoder.decode(chunk);
+        } catch {
+          return;
+        }
+        for (const frame of frames) {
+          if (frame.type === MSG.DATA_OUT && filter) {
+            filter.feed(frame.payload);
+          } else if (frame.type === MSG.EXIT) {
+            const { code } = decodeExit(frame.payload);
+            if (filter) filter.flush();
+            const exitEvt = makeExitEvent({
+              session: sessionName,
+              exit_code: code,
+              duration_ms: Date.now() - startedAt,
+            });
+            writer.write(exitEvt);
+          }
+        }
+      });
+
+      conn.socket.on("close", () => {
+        if (filter) filter.flush();
+      });
+    } catch (e: any) {
+      die(e.message);
+    }
+  }
+
+  // Clean shutdown on signals
+  process.on("SIGTERM", () => process.exit(0));
+  process.on("SIGINT", () => process.exit(0));
+  process.on("SIGPIPE", () => process.exit(0));
+
+  // Keep alive
+  await new Promise(() => {});
+}
+
 async function cmdInfo(args: string[]): Promise<void> {
   const name = args[0];
   if (!name) die("info requires a session name");
@@ -434,6 +629,12 @@ async function main(): Promise<void> {
       break;
     case "info":
       await cmdInfo(rest);
+      break;
+    case "watch":
+      await cmdWatch(rest);
+      break;
+    case "tail-events":
+      await cmdTailEvents(rest);
       break;
     default:
       die(`Unknown command: ${cmd}\nRun 'holdpty --help' for usage`);
