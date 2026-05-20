@@ -1,20 +1,24 @@
 {
-  "name": "holdpty",
-  "version": "0.4.0",
-  "description": "Minimal cross-platform detached PTY. Launch commands in a pseudo-terminal, attach/view/record later.",
+  "name": "pi-holdpty",
+  "version": "0.5.0",
+  "description": "Pi-flavored holdpty fork: detached PTY + watchexec-style regex watcher + exit notifications + session ownership. Fork of marcfargas/holdpty.",
   "type": "module",
   "license": "MIT",
-  "author": "Marc Fargas <marc@fargas.com>",
-  "homepage": "https://github.com/marcfargas/holdpty#readme",
+  "author": "buihongduc132",
+  "homepage": "https://github.com/buihongduc132/pi-holdpty#readme",
   "bugs": {
-    "url": "https://github.com/marcfargas/holdpty/issues"
+    "url": "https://github.com/buihongduc132/pi-holdpty/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/marcfargas/holdpty.git"
+    "url": "git+https://github.com/buihongduc132/pi-holdpty.git"
   },
   "keywords": [
     "pi-package",
+    "pi-extension",
+    "pi",
+    "holdpty-fork",
+    "watcher",
     "pty",
     "terminal",
     "detach",
@@ -60,6 +64,15 @@
     "dist/session.js",
     "dist/session.js.map",
     "dist/session.d.ts",
+    "dist/event-stream.js",
+    "dist/event-stream.js.map",
+    "dist/event-stream.d.ts",
+    "dist/watcher-filter.js",
+    "dist/watcher-filter.js.map",
+    "dist/watcher-filter.d.ts",
+    "dist/cli-commands.js",
+    "dist/cli-commands.js.map",
+    "dist/cli-commands.d.ts",
     "skills/",
     ".well-known/",
     "LICENSE",
@@ -70,6 +83,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run src/platform.test.ts src/ring-buffer.test.ts src/protocol.test.ts",
     "test:integration": "vitest run src/integration.test.ts",
     "test:e2e": "vitest run src/e2e.test.ts",
@@ -86,8 +100,9 @@
     "@changesets/changelog-github": "^0.5.2",
     "@changesets/cli": "^2.29.8",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.1",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.2.1"
   },
   "engines": {
     "node": ">=18"

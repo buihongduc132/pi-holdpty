@@ -1,6 +1,14 @@
-# holdpty
+# pi-holdpty
 
-Minimal cross-platform detached PTY — a pseudo-terminal that makes programs think they're running in a real terminal. Launch commands, attach/view/record later.
+> **Fork of [marcfargas/holdpty@0.4.0](https://github.com/marcfargas/holdpty)** (MIT).
+> All upstream functionality is preserved. This fork adds:
+> - **Watchexec-style regex watcher** (`holdpty watch`) with debounce, coalescing, and backpressure
+> - **Exit notifications** (`holdpty wait`, `--exit-on <regex>`)
+> - **Unified NDJSON event stream** (`holdpty tail-events`) merging match + exit + dropped events
+> - **Session ownership** (claim/release/force-claim) with stale detection (Phase 2)
+> - **Pi extension** with `session_start` additionalContext injection (Phase 2)
+
+Minimal cross-platform detached PTY — a pseudo-terminal that makes programs think they're running in a real terminal. Launch commands, attach/view/record later. Now with structured event streaming for orchestrators and AI agents.
 
 > **Status**: Beta — fully functional on Windows and Linux. CLI flags may evolve before 1.0.
 
