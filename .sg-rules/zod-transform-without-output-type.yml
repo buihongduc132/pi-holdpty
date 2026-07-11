@@ -1,0 +1,52 @@
+# SOURCE: https://zod.dev/?id=transform
+#   "transform() changes the output type. Without chaining an output schema after
+#   transform, the inferred type may not match the actual runtime type."
+# SOURCE: https://zod.dev/?id=coercion
+#   "When using transform, the output type changes. If you don't validate the
+#   transformed value, invalid runtime types bypass type checking."
+# SOURCE: https://zod.dev/?id=chaining-after-transform
+#   "After a transform, the type is the transform's return type. Chain a .pipe()
+#   with an output schema to validate the transformed result."
+id: zod-transform-without-output-type
+language: typescript
+message: "transform() without chained output schema — transformed value is not validated. Chain .pipe(outputSchema) after transform"
+severity: warning
+note: |
+  UNSAFE:
+    z.string().transform((val) => JSON.parse(val));
+    // If JSON.parse returns unexpected shape, no validation catches it
+  
+    z.string().transform((val) => parseInt(val, 10));
+    // NaN passes through without validation
+  
+  SAFE:
+    z.string().transform((val) => JSON.parse(val)).pipe(z.object({ name: z.string() }));
+    z.string().transform((val) => parseInt(val, 10)).pipe(z.number().int().min(0));
+    z.string().pipe(z.coerce.number().int());  // prefer coerce for simple conversions
+  
+  WHY: transform() changes the runtime type but doesn't validate the output. If the
+  transform produces an unexpected value (NaN from parseInt, unexpected JSON shape),
+  downstream code receives unvalidated data. Senior devs often assume transform()
+  implies type safety, but it only changes the type inference — not runtime validation.
+rule:
+  any:
+    - pattern: $SCHEMA.transform(($$$) => $$$)
+  not:
+    any:
+      # Safe: transform followed by .pipe() with output schema
+      - pattern: $SCHEMA.transform(($$$) => $$$).pipe($$$)
+      # Safe: transform followed by .refine()
+      - pattern: $SCHEMA.transform(($$$) => $$$).refine($$$)
+      # Safe: transform followed by another .transform() (chain continues)
+      - pattern: $SCHEMA.transform(($$$) => $$$).transform($$$)
+constraints:
+  SCHEMA:
+    regex: 'z\\..+|[A-Za-z]+'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

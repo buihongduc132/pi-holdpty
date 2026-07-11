@@ -1,0 +1,54 @@
+# SOURCE: https://zod.dev/?id=refine
+#   "The refine function's return value determines validity: true = valid, false = invalid.
+#   Returning undefined is truthy in some contexts but signals a missing return statement."
+# SOURCE: https://zod.dev/?id=customize-error-with-a-transformer
+#   "If refine callback doesn't explicitly return a boolean, the result is unpredictable."
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Arrow_functions
+#   "Arrow function with curly braces requires explicit return. Missing return = returns undefined."
+id: zod-refine-no-return-undefined
+language: typescript
+message: "refine() callback may return undefined — silent validation pass-through. Ensure callback explicitly returns boolean"
+severity: error
+note: |
+  UNSAFE:
+    z.string().refine((val) => {
+      if (val.length > 10) return false;
+      // Missing return for other cases → returns undefined → Zod treats as truthy → passes!
+    });
+    z.string().refine((val) => {
+      val.length > 10;              // Expression not returned → undefined
+    });
+  
+  SAFE:
+    z.string().refine((val) => val.length <= 10);
+    z.string().refine((val) => {
+      if (val.length > 10) return false;
+      return true;
+    });
+    z.string().refine((val) => val.length <= 10, { message: 'Too long' });
+  
+  WHY: When a refine callback uses curly braces (block body) but forgets a return statement,
+  it returns undefined. Zod coerces undefined as truthy → the validation ALWAYS passes.
+  This means malformed data silently passes through. Senior devs frequently miss the
+  return when adding conditional logic to refine callbacks.
+rule:
+  any:
+    # Block-body arrow function in refine with no return
+    - pattern: $SCHEMA.refine(($$$) => { $$$ })
+  not:
+    any:
+      # Safe: expression-body arrow function (implicit return)
+      - pattern: $SCHEMA.refine(($$$) => $EXPR)
+      # Safe: has explicit return inside
+      - pattern: $SCHEMA.refine(($$$) => { $$$ return $$$ $$$ })
+constraints:
+  SCHEMA:
+    regex: 'z\\..+|[A-Za-z]+'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

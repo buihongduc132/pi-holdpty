@@ -1,0 +1,24 @@
+# SOURCE: coding-guard internal — detects .trim() calls in React render paths
+id: no-unguarded-trim-in-render
+message: "Unguarded .trim() in component — consider (val ?? '').trim() or val?.trim()"
+severity: info
+language: TypeScript
+note: |
+  Flags .trim() calls in React component files (.tsx) that lack
+  null-safety guards. Use (value ?? '').trim() or value?.trim().
+rule:
+  pattern: $OBJ.trim()
+constraints:
+  OBJ:
+    regex: '^\w+(\.\w+)+$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/scripts/**'
+  - '**/fixtures/**'

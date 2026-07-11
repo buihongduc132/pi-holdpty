@@ -1,0 +1,27 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-console
+#   ESLint bans ALL console by default but provides allow: ["warn","error"] option.
+#   No mature tool does context-aware detection (catch_clause, .catch(), etc).
+# SOURCE: https://github.com/eslint/eslint/issues/2621
+#   Community consensus: console.warn and console.error are production-safe.
+# SOURCE: https://ast-grep.github.io/catalog/typescript/no-console-except-catch.html
+#   Original catalog rule — replaced with method-level allowlist approach.
+id: no-console-except-error
+language: typescript
+message: "Use a proper logger instead of console.log/debug/trace/info. console.warn and console.error are allowed."
+severity: warning
+note: "Mirrors ESLint no-console with allow: ['warn','error']. Only bans debug-only methods."
+rule:
+  pattern: console.$METHOD($$$)
+constraints:
+  METHOD:
+    regex: 'log|debug|trace|info'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/*.test-d.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

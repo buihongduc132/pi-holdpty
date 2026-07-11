@@ -1,0 +1,56 @@
+# SOURCE: https://typescript-book.com/exceptions/your-own-error
+#   "Create a base error class for your domain. All custom errors should extend it,
+#   not the native Error. This enables centralized error handling, error codes, and
+#   structured error serialization."
+# SOURCE: https://kentcdodds.com/blog/get-a-catch-block-error-message-with-typescript
+#   "Subclass Error for different error categories (AppError, NetworkError, etc.)
+#   so catch blocks can discriminate by type."
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/classes.html#extends-clauses
+#   TypeScript class inheritance: "extends establishes an IS-A relationship."
+id: error-must-extend-base
+language: typescript
+message: "Custom error class extends raw Error — extend your domain base error class instead (e.g., AppError, DomainError) for centralized error handling and error codes"
+severity: error
+note: |
+  UNSAFE:
+    class NotFoundError extends Error { }
+    class ValidationError extends Error { }
+    class AuthError extends Error { }
+    // Each has its own shape, no common error code, no centralized serialization
+  
+  SAFE:
+    class AppError extends Error {
+      constructor(public code: string, message: string, public statusCode: number) {
+        super(message);
+        this.name = this.constructor.name;
+      }
+    }
+    class NotFoundError extends AppError {
+      constructor(resource: string) { super('NOT_FOUND', `${resource} not found`, 404); }
+    }
+    class ValidationError extends AppError {
+      constructor(field: string) { super('VALIDATION', `Invalid ${field}`, 400); }
+    }
+  
+  WHY: Direct `extends Error` produces error classes with no common interface. You can't:
+  (1) serialize errors uniformly for API responses, (2) catch by category (AppError vs
+  third-party Error), (3) attach error codes for i18n, (4) map to HTTP status codes
+  centrally. A domain base class enforces all errors carry code + message + status.
+rule:
+  pattern: class $NAME extends Error { $$$BODY }
+  not:
+    any:
+      # Safe: this IS the base class itself (class AppError extends Error)
+      - pattern: class AppError extends Error { $$$BODY }
+      - pattern: class BaseError extends Error { $$$BODY }
+      - pattern: class DomainError extends Error { $$$BODY }
+      - pattern: class CustomError extends Error { $$$BODY }
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/node_modules/**'

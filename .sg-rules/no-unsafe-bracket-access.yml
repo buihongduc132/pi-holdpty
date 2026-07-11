@@ -1,0 +1,58 @@
+# SOURCE: https://www.typescriptlang.org/tsconfig#noUncheckedIndexedAccess
+#   "noUncheckedIndexedAccess: true makes index signatures return T | undefined.
+#   Without it, obj[key] returns T — ignoring the possibility of undefined."
+# SOURCE: https://www.totaltypescript.com/accessing-object-properties
+#   "Bracket access on objects and arrays may return undefined. Use optional chaining
+#   or explicit checks. Don't assume the key exists."
+# SOURCE: https://typescript-book.com/objectTypes/index-signatures
+#   "Index signatures are inherently loose. Prefer Map/Record with explicit keys."
+id: no-unsafe-bracket-access
+language: typescript
+message: "Bracket access without undefined check — property may not exist. Use optional chaining (obj[key]?.) or explicit check"
+severity: error
+note: |
+  UNSAFE:
+    const user = users[id];
+    const prop = obj[key];
+    const item = arr[0];
+    // All may be undefined — TypeScript treats as T, not T | undefined
+    // (unless noUncheckedIndexedAccess is enabled)
+  
+  SAFE:
+    const user = users[id];  // only safe if Map.get() or has() check
+    if (user) { ... }        // narrow after access
+    
+    const user = users[id]?.name;  // optional chaining
+    
+    const user = users.get(id);    // Map.get() returns T | undefined
+    
+    if (id in users) {
+      const user = users[id];      // safe after guard
+    }
+  
+  WHY: Without noUncheckedIndexedAccess (rarely enabled), bracket access returns T
+  instead of T | undefined. Runtime crashes from accessing properties on undefined.
+  This is the #1 source of "cannot read property of undefined" errors in TypeScript apps.
+rule:
+  pattern: $OBJ[$KEY].$PROP
+  not:
+    any:
+      # Safe: already has optional chaining
+      - pattern: $OBJ[$KEY]?.$PROP
+      # Safe: preceded by truthy check
+      - inside:
+          pattern: |
+            if ($OBJ[$KEY]) {
+              $$$PRE
+              $OBJ[$KEY].$PROP
+              $$$POST
+            }
+          stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

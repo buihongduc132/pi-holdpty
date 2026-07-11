@@ -1,0 +1,25 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-magic-numbers
+#   ESLint no-magic-numbers: "Disallow magic numbers — numbers should be named constants."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-1094/
+#   SonarQube S109: "Magic numbers should not be used."
+id: no-magic-numbers
+language: TypeScript
+message: "Magic number detected — extract to a named constant"
+severity: hint
+note: "Mirrors ESLint no-magic-numbers and SonarQube S109. Flags numeric literals > 1 in comparisons."
+rule:
+  pattern: $X === $NUM
+constraints:
+  NUM:
+    regex: '[2-9]'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'
+  - '**/const*'
+  - '**/constants*'

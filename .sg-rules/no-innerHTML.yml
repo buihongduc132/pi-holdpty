@@ -1,0 +1,22 @@
+# SOURCE: https://github.com/mozilla/eslint-plugin-no-unsanitized/blob/master/rules/no-unsanitized-property.md
+#   Mozilla eslint-plugin-no-unsanitized: flags innerHTML/outerHTML assignments with unsanitized values.
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-2819/
+#   SonarQube S2819: "DOM properties should not be misused — innerHTML with untrusted data is XSS."
+# SOURCE: https://websitesecurityscanner.org/alerts/dom-xss-innerhtml/
+#   DOM XSS via innerHTML is OWASP A03:2021 Injection.
+id: no-innerHTML
+language: TypeScript
+message: "Avoid .innerHTML / .outerHTML assignment — XSS risk, use textContent or DOM API"
+severity: error
+note: "Mirrors Mozilla no-unsanitized and SonarQube S2819. Direct innerHTML assignment is the #1 DOM XSS vector."
+rule:
+  any:
+    - pattern: $EL.innerHTML = $VAL
+    - pattern: $EL.outerHTML = $VAL
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'

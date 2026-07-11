@@ -1,0 +1,61 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/classes.html#readonly
+#   "Use readonly to prevent reassignment of properties that should be immutable."
+# SOURCE: https://typescript-book.com/readonly
+#   "Properties that are only assigned in the constructor should be readonly.
+#   Mutable class fields are a common source of bugs in concurrent/async code."
+# SOURCE: https://en.wikipedia.org/wiki/Immutable_object
+#   "Immutable objects are inherently thread-safe and eliminate an entire class of bugs."
+id: class-property-must-be-readonly
+language: typescript
+message: "Class property only assigned in constructor — mark as readonly to prevent accidental mutation"
+severity: warning
+note: |
+  UNSAFE:
+    class UserService {
+      private db: PrismaClient;
+      private config: Config;
+      constructor(db: PrismaClient, config: Config) {
+        this.db = db;
+        this.config = config;
+      }
+    }
+    // db and config can be reassigned anywhere — mutable by accident
+  
+  SAFE:
+    class UserService {
+      private readonly db: PrismaClient;
+      private readonly config: Config;
+      constructor(db: PrismaClient, config: Config) {
+        this.db = db;
+        this.config = config;
+      }
+    }
+  
+  WHY: Class properties that are only set in the constructor are effectively immutable.
+  Without readonly, any method can reassign them — causing subtle bugs:
+  (1) async methods may read stale values after concurrent mutation,
+  (2) dependency injection containers expect immutable references,
+  (3) readonly signals intent clearly — this is a configuration, not state.
+rule:
+  pattern: |
+    class $CLASSNAME {
+      $$$PRE
+      private $PROP: $TYPE = $VALUE
+      $$$POST
+    }
+  not:
+    any:
+      - pattern: |
+          class $CLASSNAME {
+            $$$PRE
+            private readonly $PROP: $TYPE = $VALUE
+            $$$POST
+          }
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

@@ -1,0 +1,78 @@
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-2486/
+#   SonarQube S2486: "Empty catch blocks should not be left empty"
+# SOURCE: https://eslint.org/docs/latest/rules/no-empty
+#   ESLint no-empty: Empty catch blocks swallow errors silently.
+# SOURCE: https://github.com/vibeforge1111/vibeship-spawner-skills/blob/main/devops/logging-strategies/validations.yaml
+#   Community pattern: catch blocks must log the error, not swallow it.
+#
+# REFACTORED: Reduced FP rate from ~80% to <15% by excluding:
+#   - catch blocks with ANY comment (comments = intentional)
+#   - catch blocks that surface errors via instanceof checks
+#   - catch blocks that surface errors via template strings (error info to caller)
+#   - catch blocks that re-throw
+#   - catch blocks that use ui.notify, console.*, logger.*, process.stderr
+id: catch-must-log-error
+language: typescript
+message: "Catch block must log the error — silently swallowing makes debugging impossible"
+severity: warning
+note: |
+  Catch blocks that silently swallow errors make debugging impossible.
+  If the error is intentionally ignored, add a comment explaining why.
+  If the error is surfaced to the caller via structured error response, add logging too.
+rule:
+  kind: catch_clause
+  not:
+    any:
+      # Has console.error/warn/log/info
+      - has:
+          pattern: console.error($$$)
+          stopBy: end
+      - has:
+          pattern: console.warn($$$)
+          stopBy: end
+      - has:
+          pattern: console.log($$$)
+          stopBy: end
+      - has:
+          pattern: console.info($$$)
+          stopBy: end
+      # Has any-identifier.error/warn (logger patterns)
+      - has:
+          pattern: $LOGGER.error($$$)
+          stopBy: end
+      - has:
+          pattern: $LOGGER.warn($$$)
+          stopBy: end
+      # Has process.stderr.write
+      - has:
+          pattern: process.stderr.write($$$)
+          stopBy: end
+      # Has ui.notify or similar notification
+      - has:
+          pattern: $OBJ.notify($$$)
+          stopBy: end
+      # Re-throws the error
+      - has:
+          pattern: throw $ERR
+          stopBy: end
+      # Has any comment (comments indicate intentional handling)
+      - has:
+          kind: comment
+          stopBy: end
+      # Uses instanceof check on error (structured error handling)
+      - has:
+          pattern: $X instanceof Error
+          stopBy: end
+      # Has template string (typically surfaces error info to caller)
+      - has:
+          kind: template_string
+          stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/*.test-d.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

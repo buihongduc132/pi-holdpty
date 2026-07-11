@@ -1,0 +1,48 @@
+# SOURCE: https://typescript-eslint.io/rules/ban-ts-comment/
+#   typescript-eslint ban-ts-comment: by default disallows `@ts-ignore` and `@ts-nocheck`
+#   while allowing `@ts-expect-error` (with description). Recommended preset.
+# SOURCE: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-9.html#-ts-expect-error-comments
+#   TypeScript 3.9 introduced `@ts-expect-error` precisely so that the suppression
+#   itself raises an error once the underlying issue is fixed — `@ts-ignore` does not.
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-6535/
+#   SonarQube S6535: "TypeScript directive comments should not be used to silence type errors."
+id: no-ts-ignore-comment
+language: TypeScript
+message: "Replace @ts-ignore / @ts-nocheck with @ts-expect-error — the latter errors out once the underlying issue is fixed"
+severity: warning
+note: |
+  Mirrors typescript-eslint ban-ts-comment (recommended preset) and SonarQube S6535.
+
+  `@ts-ignore` silences the next line forever — even after the type bug is
+  fixed, the directive lingers as dead noise (and can hide new bugs).
+  `@ts-expect-error` flips the contract: it suppresses the error, but the
+  compiler reports an error if the next line type-checks cleanly, so
+  obsolete suppressions get flagged the moment they become obsolete.
+  `@ts-nocheck` opts an entire file out of type checking and is almost
+  never the right answer in a typed codebase.
+
+  BAD:
+    // @ts-ignore
+    const value: number = JSON.parse(raw);
+
+    // @ts-nocheck
+    // (silences the entire file)
+
+  GOOD:
+    // @ts-expect-error - upstream types are wrong, see DT#12345
+    const value: number = JSON.parse(raw);
+
+rule:
+  kind: comment
+  regex: '@ts-(ignore|nocheck)\b'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/*.test-d.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'

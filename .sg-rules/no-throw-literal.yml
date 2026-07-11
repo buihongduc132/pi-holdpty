@@ -1,0 +1,50 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/functions.html#optional-parameters-in-callbacks
+#   "Use explicit return types on methods that return promises to avoid accidentally
+#   returning void (floating promises)."
+# SOURCE: https://typescript-book.com/exceptions/dont-throw-use-errors
+#   "throw 'string' or throw 42 bypasses Error stack trace capture. Always throw
+#   an Error subclass with proper context."
+# SOURCE: https://kentcdodds.com/blog/get-a-catch-block-error-message-with-typescript
+#   "throw new Error() captures stack. throw 'message' does not."
+id: no-throw-literal
+language: typescript
+message: "throw with non-Error value — no stack trace captured. Use throw new Error() or throw new AppError() for proper stack traces"
+severity: error
+note: |
+  UNSAFE:
+    throw 'Something went wrong'
+    throw 404
+    throw { message: 'failed', code: 'ERR_FAIL' }
+    throw response.statusText
+  
+  SAFE:
+    throw new Error('Something went wrong')
+    throw new AppError('FAILED', 'Something went wrong', 500)
+    throw new NotFoundError('User')
+    if (err instanceof Error) throw err;
+  
+  WHY: Only `throw new Error()` (or subclass) captures a stack trace. Throwing strings,
+  numbers, or plain objects produces errors with no stack trace — you can see the error
+  message but have NO idea where it was thrown from. This makes production debugging
+  impossible. Rule enforces all throws use Error instances.
+rule:
+  any:
+    - pattern: throw $LIT
+  not:
+    any:
+      # Safe: throwing Error instances
+      - pattern: throw new $ERR($$$ARGS)
+      - pattern: throw new $ERR
+      # Safe: rethrowing caught error
+      - inside:
+          kind: catch_clause
+          stopBy: end
+          pattern: throw $ERR
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

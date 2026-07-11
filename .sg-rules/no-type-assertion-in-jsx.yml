@@ -1,0 +1,23 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-assertions
+#   TypeScript handbook: "Type assertions are a way to tell TypeScript 'trust me, I know what I'm doing.'
+#   The two syntaxes are angle-bracket and as-style, but angle-bracket syntax is NOT valid in JSX/TSX files."
+# SOURCE: https://typescript-eslint.io/rules/consistent-type-assertions/
+#   @typescript-eslint/consistent-type-assertions: "Enforce consistent usage of type assertions."
+id: no-type-assertion-in-jsx
+language: typescript
+message: "Angle-bracket type assertion (<Type>expr) conflicts with JSX syntax in TSX — use 'as' syntax instead"
+severity: error
+note: |
+  In TSX files, <Type>expr is ambiguous — TypeScript parses it as a JSX element, not a type assertion.
+  Use expr as Type instead. This is a hard error in TSX files, not a style preference.
+rule:
+  pattern: <$TYPE>$EXPR
+  # ast-grep limitation: tree-sitter-typescript may parse this as JSX, not type assertion.
+  # If this rule doesn't fire, it's because the parser can't distinguish JSX from angle-bracket assertions.
+  # TypeScript itself handles this by banning angle-bracket assertions in TSX — this rule mirrors that.
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'

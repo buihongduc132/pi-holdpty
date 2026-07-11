@@ -1,0 +1,20 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-empty
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-108/
+id: no-empty-catch
+message: Empty catch block silently swallows errors — handle the error or add a comment explaining why it's intentionally ignored
+severity: warning
+language: TypeScript
+note: Mirrors ESLint no-empty and SonarQube S108. Catch blocks with comments are acceptable.
+rule:
+  kind: statement_block
+  pattern: '{}'
+  inside:
+    kind: catch_clause
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

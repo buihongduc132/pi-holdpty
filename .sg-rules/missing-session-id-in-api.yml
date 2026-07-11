@@ -1,0 +1,16 @@
+id: missing-session-id-in-api
+language: typescript
+rule:
+  all:
+    - any:
+        - pattern: Response.json($OBJ)
+        - pattern: json($_, $OBJ)
+    - not:
+        has:
+          pattern: "sessionId: $_"
+    - inside:
+        any:
+          - pattern: if ($_ === "/api/plan") { $$$ }
+          - pattern: if ($_ === "/api/diff") { $$$ }
+message: "API response for /api/plan or /api/diff is missing sessionId. This breaks the 'Current' session badge."
+severity: error

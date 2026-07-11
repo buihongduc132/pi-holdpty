@@ -1,0 +1,21 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-nested-ternary
+#   ESLint no-nested-ternary: "Disallow nested ternary expressions."
+# SOURCE: https://github.com/airbnb/javascript/blob/master/packages/eslint-config-airbnb-base/rules/style.js
+#   Airbnb style guide: "Ternaries should not be nested."
+id: no-nested-ternary
+language: TypeScript
+message: "Avoid nested ternary — extract to a variable or use if/else"
+severity: warning
+note: "Mirrors ESLint no-nested-ternary and Airbnb style guide. Nested ternaries are unreadable."
+rule:
+  kind: ternary_expression
+  has:
+    kind: ternary_expression
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

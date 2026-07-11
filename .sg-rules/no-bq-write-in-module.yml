@@ -1,0 +1,65 @@
+# SOURCE: https://cloud.google.com/bigquery/docs/best-practices-performance-overview
+#   Google Cloud: "Batch writes via the BigQuery Storage Write API or load jobs
+#   should be isolated in dedicated write services, not scattered across module code."
+# SOURCE: https://cloud.google.com/bigquery/docs/loading-data
+#   BigQuery docs: table.insert() and table.load() are write operations that should
+#   be routed through a write layer to centralize error handling, retries, and auditing.
+#
+# CONTEXT: ALL mod-* modules (mod-contractor-payment, mod-*, …) must NOT call
+#   BigQuery write APIs directly. All writes (insert, load, createTable,
+#   write-queries) must go through a dedicated write service so that retry logic,
+#   error classification, and audit logging are centralized. Direct calls from
+#   module code bypass these safeguards and make write operations invisible to
+#   the write service's monitoring and alerting pipeline.
+#
+# SCOPE: Applied at common/typescript/ level — covers ALL mod-* modules
+#   (and any future repo using BigQuery). Constraint regex filters out
+#   non-BQ false positives (only matches BQ-like variable names).
+id: no-bq-write-in-module
+language: typescript
+message: "BQ write API calls in module code — write operations must go through a dedicated write service, not called directly from module code"
+severity: error
+note: |
+  UNSAFE — direct write calls from module code:
+    import { Table } from "@google-cloud/bigquery";
+    const table: Table = bigquery.dataset("my_ds").table("my_tbl");
+    table.insert([{id: 1}]);                          // streaming insert
+    table.load("gs://bucket/data.csv");                // load job
+    dataset.createTable("new_tbl", { schema: "..." }); // DDL
+    bq.query("INSERT INTO t VALUES (1)");              // write query
+
+  SAFE — route through write service:
+    import { writeService } from "../services/bq-write-service";
+    await writeService.insert("my_ds.my_tbl", rows);
+    await writeService.load("my_ds.my_tbl", uri, options);
+    await writeService.query("INSERT INTO t VALUES (1)");
+
+  WHY: Direct BigQuery write calls from module code bypass centralized error
+  handling, retry policies, rate limiting, and audit logging. The write service
+  provides structured error classification, exponential backoff, and
+  dead-letter queuing. Scattered writes are invisible to monitoring and
+  impossible to roll back consistently.
+
+  CONSTRAINTS: Variable names are matched via regex to reduce false positives.
+  Only variable names that look like BigQuery objects (e.g., table, bqTable,
+  bq_table, dataset, bq, bigquery, bqClient) are flagged. Generic method calls
+  like `list.insert()` or `data.load()` are NOT flagged.
+rule:
+  any:
+    # table.insert() / table.load() — streaming insert and load jobs
+    - pattern: $OBJ.insert($$$ARGS)
+    - pattern: $OBJ.load($$$ARGS)
+    # dataset.createTable() — DDL
+    - pattern: $OBJ.createTable($$$ARGS)
+    # bq.query() / bigquery.query() — may contain write SQL
+    - pattern: $OBJ.query($$$ARGS)
+constraints:
+  OBJ:
+    regex: '(?i)^((bq|bigquery)[_\\s]?(table|dataset|client)?|table|dataset)$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'

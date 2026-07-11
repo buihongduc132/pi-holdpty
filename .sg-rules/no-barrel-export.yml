@@ -1,0 +1,17 @@
+# SOURCE: https://github.com/formatjs/formatjs/blob/master/sg-rules/no-barrel-export.yml
+# Authored by: formatjs/formatjs
+id: no-barrel-export
+language: typescript
+message: "Barrel exports (export * from) are banned. Use deep imports instead to reduce bundle size."
+severity: error
+url: https://github.com/formatjs/formatjs/blob/master/sg-rules/no-barrel-export.yml
+rule:
+  pattern: "export * from '$PATH'"
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

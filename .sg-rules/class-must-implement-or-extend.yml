@@ -1,0 +1,61 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/classes.html#implements-clauses
+#   "Classes should implement interfaces to enforce contractual shape. Standalone
+#   classes without interface contracts create implicit APIs that drift over time."
+# SOURCE: https://typescript-book.com/classes/implements
+#   "implements establishes a HAS-A contract. Every exported class should implement
+#   an interface — this enables dependency injection, mocking, and polymorphism."
+# SOURCE: https://en.wikipedia.org/wiki/SOLID#Interface_segregation_principle
+#   SOLID Interface Segregation: "Define contracts via interfaces, implement via classes."
+id: class-must-implement-or-extend
+language: typescript
+message: "Standalone class without extends or implements — must extend a base class or implement an interface for contract enforcement"
+severity: warning
+note: |
+  UNSAFE:
+    export class UserService {
+      async getUser(id: string) { ... }
+      async createUser(data: UserData) { ... }
+    }
+    // No contract — shape is implicit, can't mock, can't swap implementation
+  
+  SAFE:
+    interface IUserService {
+      getUser(id: string): Promise<User>;
+      createUser(data: UserData): Promise<User>;
+    }
+    export class UserService implements IUserService {
+      async getUser(id: string): Promise<User> { ... }
+      async createUser(data: UserData): Promise<User> { ... }
+    }
+    
+    // OR extend a base class:
+    export class UserService extends BaseService { ... }
+  
+  WHY: Standalone exported classes create implicit APIs. Without an interface or base class:
+  (1) can't generate mocks for testing, (2) can't swap implementations for DI,
+  (3) method signatures can silently drift, (4) consumers couple to implementation not contract.
+  Every exported class should either implement an interface or extend a base class.
+rule:
+  pattern: export class $NAME { $$$BODY }
+  not:
+    any:
+      # Safe: implements an interface
+      - pattern: export class $NAME implements $$$INTERFACES { $$$BODY }
+      # Safe: extends a base class
+      - pattern: export class $NAME extends $BASE { $$$BODY }
+      # Safe: abstract base classes
+      - pattern: export abstract class $NAME { $$$BODY }
+      # Safe: type-only/utility classes with only static members
+      - pattern: |
+          export class $NAME {
+            static $$$STATIC_MEMBERS
+          }
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/node_modules/**'

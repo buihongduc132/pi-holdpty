@@ -1,0 +1,42 @@
+# SOURCE: https://getpino.io/#/docs/api?id=logger
+#   "Pino is a structured JSON logger. Use it instead of console for production logging.
+#   console.log produces unstructured output that's hard to query in log aggregation systems."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-4794/
+#   SonarQube S4794: "Using console logging in production code is a security and performance risk."
+# Rationale: This is the server-side companion to no-console-except-error (which is in common/).
+# Server code should ALWAYS use pino (injected via Fastify request.log or a shared logger).
+#
+# REFINED: Only flags console.log, console.debug, console.trace, console.info.
+# console.error and console.warn are legitimate error/warning logging and are NOT flagged.
+id: no-console-in-server
+language: typescript
+message: "console.log/debug/info/trace in server code — use request.log (Fastify pino) or the shared logger instead. Structured logs are required for Cloud Run log aggregation."
+severity: warning
+note: |
+  Flags unstructured console output (log, debug, trace, info) in server-side code.
+  These produce output without: request ID, timestamp, trace context, or log level.
+  
+  console.error and console.warn are NOT flagged — they are legitimate for error/warning
+  logging and produce properly tagged output (stderr with error/warn level markers).
+rule:
+  pattern: console.$METHOD($$$)
+constraints:
+  METHOD:
+    # Only unstructured output methods — NOT error or warn
+    regex: '^(log|debug|trace|info)$'
+paths:
+  - '**/api/**'
+  - '**/server/**'
+  - '**/routes/**'
+  - '**/src/index.ts'
+  - '**/src/app.ts'
+  - '**/src/server.ts'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - '**/migrations/**'
+  - 'test-*.ts'

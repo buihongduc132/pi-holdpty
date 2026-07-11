@@ -1,0 +1,45 @@
+# SOURCE: https://typescript-eslint.io/rules/consistent-type-assertions/
+#   @typescript-eslint/consistent-type-assertions: "Enforce consistent usage of type assertions."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-6508/
+#   SonarQube S6508: "Type assertions should not be used."
+# SOURCE: https://google.github.io/styleguide/tsguide.html#type-assertions
+#   Google TS Style Guide: "Prefer type annotations over type assertions."
+#
+# REFINED: Only flags truly unsafe assertions — `as any` and `as unknown as X`.
+# Safe assertions (DOM narrowing, generic params, runtime-validated types) are excluded.
+id: no-unsafe-type-assertion
+language: TypeScript
+message: "Unsafe type assertion — `as any` or `as unknown as X` bypasses type safety. Use proper typing, type guards, or validation instead."
+severity: warning
+note: |
+  Only flags the two most dangerous assertion patterns:
+  
+  1. `as any` — completely opts out of type checking. Often hides bugs in JSON parsing,
+     fetch responses, and dynamic imports.
+  2. `as unknown as X` — double assertion that forces an incompatible type cast.
+     Circumvents TypeScript's safety checks.
+  
+  Safe patterns NOT flagged:
+  - React event narrowing: `e.target as HTMLInputElement`
+  - Node API narrowing: `server.address() as { port: number }`
+  - Generic param passing: `value as never`
+  - Const assertions: `{ a: 1 } as const`
+  - Runtime-validated narrowing: `return parsed as CodeTourOutput` (after null check)
+rule:
+  # Match any `as` assertion, then constrain TYPE to only unsafe ones
+  pattern: $EXPR as $TYPE
+constraints:
+  TYPE:
+    # Only match: any, any[], unknown (as part of double assertion), or Record<string, unknown>
+    # The `as unknown` in double assertions will match here; we rely on the pattern
+    # to catch both halves.
+    regex: '^(any(\[\])?|unknown)$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'

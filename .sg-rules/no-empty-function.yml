@@ -1,0 +1,24 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-empty-function
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-1186/
+id: no-empty-function
+message: Empty function body — either implement, add a comment explaining why empty, or throw NotImplementedError
+severity: warning
+language: TypeScript
+note: Mirrors ESLint no-empty-function and SonarQube S1186. Empty functions with comments inside are acceptable.
+rule:
+  kind: statement_block
+  pattern: '{}'
+  inside:
+    any:
+      - kind: function_declaration
+      - kind: function_expression
+      - kind: arrow_function
+      - kind: method_definition
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

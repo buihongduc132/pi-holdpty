@@ -1,0 +1,25 @@
+# SOURCE: https://typescript-eslint.io/rules/no-non-null-assertion/
+#   @typescript-eslint/no-non-null-assertion: "Disallow non-null assertions using the ! postfix operator."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-6557/
+#   SonarQube S6557: "Non-null assertions should not be used."
+id: no-non-null-assertion
+language: TypeScript
+message: "Avoid non-null assertion (!) — use proper null checks or optional chaining"
+severity: warning
+note: "Mirrors @typescript-eslint/no-non-null-assertion and SonarQube S6557. The ! operator lies to the compiler."
+rule:
+  pattern: $X!
+constraints:
+  X:
+    not:
+      pattern: $Y!
+      # We match the postfix ! operator on identifiers and member expressions
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'

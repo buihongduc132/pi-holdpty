@@ -1,0 +1,24 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-warning-comments
+#   Terms: TODO/FIXME/HACK only (mirrors ESLint defaults). Word boundary + location:start.
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-1135/
+#   isLetterAround() guard — requires delimiter after marker to avoid FP.
+# SOURCE: https://github.com/detekt/detekt/issues/6116
+#   Community consensus: require colon after marker (TODO: not just TODO).
+id: no-todo-comment
+message: 'TODO/FIXME/HACK comment found — track in issue tracker instead. ALWAYS callsout to the user WHENEVER encountering these TODO warning'
+severity: warning
+language: TypeScript
+note: "Mirrors ESLint no-warning-comments (terms: TODO/FIXME/HACK, location: start) and SonarQube S1135."
+rule:
+  kind: comment
+  regex: '(?i)\b(TODO|FIXME|HACK)\s*[:：]'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/*.test-d.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

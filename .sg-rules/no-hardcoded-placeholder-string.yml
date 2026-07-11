@@ -1,0 +1,23 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-magic-numbers
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-131/ (magic numbers)
+id: no-hardcoded-placeholder-string
+message: Hardcoded placeholder string detected — replace with actual value or configuration
+severity: warning
+language: TypeScript
+note: Detects strings containing placeholder markers like TODO, FIXME, INSERT, REPLACE, STUB, PLACEHOLDER in production code.
+rule:
+  any:
+    - pattern: '"$VALUE"'
+    - pattern: "'$VALUE'"
+constraints:
+  VALUE:
+    regex: '(?i)^(TODO|FIXME|STUB|PLACEHOLDER|INSERT .+|REPLACE .+|NOT IMPLEMENTED)$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

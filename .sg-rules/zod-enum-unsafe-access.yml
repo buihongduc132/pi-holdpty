@@ -1,0 +1,59 @@
+# SOURCE: https://zod.dev/?id=enums
+#   "z.enum() creates a union of string literals. The inferred type is a union of
+#   those literals, not a generic string. Bracket access on the enum values bypasses
+#   type checking."
+# SOURCE: https://www.typescriptlang.org/docs/handbook/enums.html
+#   "Enum access should use the enum type system, not string bracket access which
+#   bypasses compile-time checking."
+# SOURCE: https://zod.dev/?id=literals
+#   "Use .parse() to validate a string is a valid enum value. Direct comparison
+#   with bracket access skips validation."
+id: zod-enum-unsafe-access
+language: typescript
+message: "z.enum() value accessed via bracket notation — bypasses type safety. Use .parse() to validate or index into enum.options"
+severity: warning
+note: |
+  UNSAFE:
+    const Role = z.enum(['admin', 'user', 'moderator']);
+    type RoleType = z.infer<typeof Role>;
+    
+    const role = request.body.role as string;          // unchecked cast
+    const valid = Role.options[role];                    // undefined if invalid, no error
+    const valid2 = Role.Values[role];                    // same issue
+  
+  SAFE:
+    const Role = z.enum(['admin', 'user', 'moderator']);
+    const result = Role.safeParse(request.body.role);
+    if (!result.success) return reply.code(400).send({ error: 'Invalid role' });
+    const role = result.data;  // type-safe: 'admin' | 'user' | 'moderator'
+  
+    // Or use .parse() in a try/catch:
+    const role = Role.parse(request.body.role);
+  
+  WHY: Accessing z.enum() values via bracket notation (Role.Values[unknownString]) returns
+  undefined for invalid keys instead of throwing an error. This silently passes invalid
+  values through the system. The correct pattern is .parse() or .safeParse() which validates
+  the input against the enum at runtime and provides proper type narrowing.
+rule:
+  any:
+    - pattern: $ENUM.options[$KEY]
+    - pattern: $ENUM.Values[$KEY]
+    - pattern: $ENUM.enum[$KEY]
+  not:
+    any:
+      # Safe: key is a string literal (known at compile time)
+      - pattern: $ENUM.options["$$$LITERAL"]
+      - pattern: $ENUM.Values["$$$LITERAL"]
+      - pattern: $ENUM.enum["$$$LITERAL"]
+constraints:
+  KEY:
+    not:
+      regex: '".*"'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

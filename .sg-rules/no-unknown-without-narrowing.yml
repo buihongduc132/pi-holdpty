@@ -1,0 +1,76 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates
+#   "Type predicates (param is Type) are the TypeScript way to narrow types.
+#   typeof checks are for primitives only. instanceof is for classes."
+# SOURCE: https://www.totaltypescript.com/tips/use-type-predicates-to-narrow-types
+#   "unknown should be narrowed with type predicates before use."
+# SOURCE: https://typescript-book.com/typeNarrowing
+#   "Don't access unknown without narrowing. Use type guards."
+id: no-unknown-without-narrowing
+language: typescript
+message: "Parameter typed as 'unknown' used without type narrowing — use type guard (typeof, instanceof, in) or zod.parse() before accessing"
+severity: warning
+note: |
+  UNSAFE:
+    function handle(data: unknown) {
+      const str = data.toString();  // no narrowing — runtime error if data is null
+    }
+  
+    function process(value: unknown) {
+      console.log((value as any).name);  // bypasses the point of unknown
+    }
+  
+  SAFE:
+    function handle(data: unknown) {
+      if (typeof data === 'string') {
+        return data.toUpperCase();  // narrowed to string
+      }
+      if (typeof data === 'object' && data !== null && 'name' in data) {
+        return (data as { name: string }).name;  // narrowed
+      }
+    }
+    
+    function process(value: unknown) {
+      const result = schema.safeParse(value);  // zod validation
+      if (!result.success) throw new ValidationError('...');
+      return result.data;
+    }
+  
+  WHY: `unknown` forces you to narrow before use — that's its purpose. Accessing unknown
+  without narrowing defeats the entire point. Use typeof (primitives), instanceof (classes),
+  in operator (objects), or zod.parse() for complex shapes. `as any` on unknown is the
+  worst violation — it removes ALL type safety.
+rule:
+  pattern: $PARAM.$METHOD($$$ARGS)
+  inside:
+    any:
+      - kind: function_declaration
+      - kind: arrow_function
+      - kind: function_expression
+  not:
+    any:
+      # Safe: inside a typeof narrowing if block
+      - inside:
+          pattern: |
+            if (typeof $PARAM === $$$TYPE) {
+              $$$PRE
+              $PARAM.$METHOD($$$ARGS)
+              $$$POST
+            }
+          stopBy: end
+      # Safe: inside an instanceof narrowing if block
+      - inside:
+          pattern: |
+            if ($PARAM instanceof $$$TYPE) {
+              $$$PRE
+              $PARAM.$METHOD($$$ARGS)
+              $$$POST
+            }
+          stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

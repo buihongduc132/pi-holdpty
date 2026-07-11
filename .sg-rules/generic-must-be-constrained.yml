@@ -1,0 +1,60 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/generics.html
+#   "Generic type parameters should be constrained. Unconstrained generics
+#   are as permissive as any — they accept everything."
+# SOURCE: https://typescript-book.com/generics/constraints
+#   "Use extends to constrain generic parameters. <T> alone accepts any type,
+#   which defeats type safety. <T extends Entity> enforces a contract."
+# SOURCE: https://www.totaltypescript.com/tips/constrain-generic-type-parameters
+#   "Unconstrained generics are a smell. If T can be anything, you don't need generics."
+id: generic-must-be-constrained
+language: typescript
+message: "Unconstrained generic <T> — add extends constraint (e.g., <T extends Entity>) or use unknown directly"
+severity: warning
+note: |
+  UNSAFE:
+    function parse<T>(data: string): T { return JSON.parse(data); }
+    // T can be ANYTHING — no type safety, caller can assert anything
+  
+    class Store<T> {
+      private items: T[] = [];
+    }
+    // T is unconstrained — Store<null> is valid, Store<undefined> is valid
+  
+  SAFE:
+    function parse<T extends Record<string, unknown>>(data: string): T {
+      return JSON.parse(data);
+    }
+    
+    interface Entity { id: string }
+    class Store<T extends Entity> {
+      private items: T[] = [];
+    }
+    
+    // If you truly want "any type", use unknown explicitly:
+    function identity(value: unknown): unknown { return value; }
+  
+  WHY: Unconstrained `<T>` accepts any type, making it as unsafe as `any` in practice.
+  The caller can pass `T = any` and bypass all checks. Constraining with `extends`
+  enforces that T has a minimum shape. If no constraint is needed, `unknown` is more
+  honest than `<T>`.
+rule:
+  any:
+    - pattern: function $NAME<$T>($$$PARAMS) { $$$BODY }
+    - pattern: export function $NAME<$T>($$$PARAMS) { $$$BODY }
+    - pattern: async function $NAME<$T>($$$PARAMS) { $$$BODY }
+    - pattern: export async function $NAME<$T>($$$PARAMS) { $$$BODY }
+  not:
+    any:
+      # Safe: constrained generic
+      - pattern: function $NAME<$T extends $CONSTRAINT>($$$PARAMS) { $$$BODY }
+      - pattern: export function $NAME<$T extends $CONSTRAINT>($$$PARAMS) { $$$BODY }
+      - pattern: async function $NAME<$T extends $CONSTRAINT>($$$PARAMS) { $$$BODY }
+      - pattern: export async function $NAME<$T extends $CONSTRAINT>($$$PARAMS) { $$$BODY }
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
