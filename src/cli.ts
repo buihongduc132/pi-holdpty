@@ -558,8 +558,18 @@ async function cmdWatch(args: string[]): Promise<void> {
       });
 
       conn.socket.on("error", () => {
-        filter.flush();
-        process.exit(1);
+        // Ensure the socket fd is released and we always exit, even if
+        // filter.flush() throws — otherwise the fd leaks. Log the flush
+        // failure to stderr first so it isn't silently swallowed by exit.
+        try {
+          filter.flush();
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`Error flushing filter on socket error: ${message}\n`);
+        } finally {
+          conn.socket.destroy();
+          process.exit(1);
+        }
       });
     } catch (e: any) {
       die(e.message);

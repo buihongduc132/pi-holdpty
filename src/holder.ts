@@ -297,6 +297,8 @@ export class Holder {
     });
 
     socket.on("error", () => {
+      // disconnectClient() calls client.socket.destroy() internally, so the
+      // fd is released — no separate destroy() needed here (see #8).
       this.disconnectClient(client);
     });
   }
