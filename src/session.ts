@@ -181,6 +181,8 @@ function isSocketReachable(path: string): Promise<boolean> {
 
     socket.on("error", () => {
       clearTimeout(timeout);
+      // Release the fd explicitly; don't rely solely on Node's auto-destroy.
+      socket.destroy();
       resolve(false);
     });
   });

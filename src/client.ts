@@ -151,6 +151,8 @@ export function connect(opts: ConnectOptions): Promise<ClientConnection> {
     socket.on("data", onData);
 
     socket.on("error", (err: Error) => {
+      // Release the fd explicitly; don't rely solely on Node's auto-destroy.
+      socket.destroy();
       if (!resolved) {
         resolved = true;
         reject(new Error(`Cannot connect to session "${name}": ${err.message}`));

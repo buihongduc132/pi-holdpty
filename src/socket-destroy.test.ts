@@ -20,9 +20,12 @@
  * calls disconnectClient(), which internally calls client.socket.destroy()
  * (see disconnectClient in holder.ts).
  *
- * Location #4 (cli.ts event-stream error handler) calls process.exit(1)
- * after filter.flush(); it is exercised by the e2e suite rather than a
- * unit test because cmdWatch is unexported and the handler exits the process.
+ * Location #4 (cli.ts event-stream error handler) wraps filter.flush() in
+ * try/finally and calls process.exit(1), which makes it impractical to unit
+ * test in isolation (cmdWatch is unexported and the handler exits the
+ * process). The fix is correct by construction (try/finally guarantees the
+ * socket is destroyed even if flush throws) and is exercised indirectly by
+ * the watch command's e2e behavior, but has no dedicated assertion here.
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
