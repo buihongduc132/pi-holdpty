@@ -70,6 +70,7 @@ const { writeMetadata, listSessions } = await import("./session.js");
 type SessionMetadata = import("./session.js").SessionMetadata;
 
 let testDir: string;
+const originalHoldptyDir = process.env["HOLDPTY_DIR"];
 
 function freshDir(): string {
   testDir = mkdtempSync(join(tmpdir(), "holdpty-sock-destroy-"));
@@ -83,6 +84,12 @@ afterEach(async () => {
     if (testDir) rmSync(testDir, { recursive: true, force: true });
   } catch {
     /* ignore */
+  }
+  // Restore the original HOLDPTY_DIR so later tests don't inherit a deleted path.
+  if (originalHoldptyDir === undefined) {
+    delete process.env["HOLDPTY_DIR"];
+  } else {
+    process.env["HOLDPTY_DIR"] = originalHoldptyDir;
   }
 });
 
