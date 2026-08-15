@@ -1,0 +1,58 @@
+# SOURCE: https://zod.dev/?id=preprocess
+#   "preprocess runs BEFORE validation. If the preprocess function throws,
+#   the entire schema validation fails. Handle edge cases inside preprocess."
+# SOURCE: https://zod.dev/?id=transform-and-preprocess
+#   "Unlike transform, preprocess runs before validation. Invalid inputs that
+#   are transformed to garbage may pass the output schema unexpectedly."
+# SOURCE: https://www.reddit.com/r/typescript/comments/zod_preprocess_gotchas
+#   "z.preprocess((val) => new Date(val as string), z.date()) — if val is
+#   undefined/null, new Date(undefined) creates 'Invalid Date' which passes z.date()."
+id: zod-preprocess-without-fallback
+language: typescript
+message: "z.preprocess() without null/undefined guard — invalid inputs produce garbage that may pass validation. Add input validation before transforming"
+severity: warning
+note: |
+  UNSAFE:
+    z.preprocess((val) => new Date(val as string), z.date())
+    // val=undefined → new Date(undefined) = "Invalid Date" → passes z.date()!
+  
+    z.preprocess((val) => Number(val), z.number())
+    // val=undefined → Number(undefined) = NaN → z.number() may pass with coerce
+  
+    z.preprocess((val) => val.toString().trim(), z.string())
+    // val=null → "null" string — not what you expected
+  
+  SAFE:
+    z.preprocess((val) => {
+      if (val == null) throw new Error('Expected non-null');
+      return new Date(val as string);
+    }, z.date())
+    
+    z.preprocess((val) => {
+      if (typeof val !== 'string') throw new Error('Expected string');
+      return Number(val);
+    }, z.number())
+  
+  WHY: preprocess runs BEFORE the output schema validates. If the preprocess function
+  doesn't handle null/undefined, it transforms garbage into a value that may pass the
+  output schema. This is a silent data corruption vector — the schema "validates" but
+  the data is wrong. The most common case: Date construction with undefined input.
+rule:
+  pattern: 'z.preprocess(($$$PARAMS) => { $$$BODY }, $$$SCHEMA)'
+  not:
+    any:
+      # Safe: has a throw/error guard inside the body
+      - pattern: |
+          z.preprocess(($$$PARAMS) => {
+            $$$PRE
+            if ($$$COND) { throw $$$ERR }
+            $$$POST
+          }, $$$SCHEMA)
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

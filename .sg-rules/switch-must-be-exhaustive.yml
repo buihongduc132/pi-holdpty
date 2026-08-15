@@ -1,0 +1,62 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/narrowing.html#exhaustiveness-checking
+#   "Use never in switch default to ensure all cases are handled. Missing cases
+#   silently fall through to default."
+# SOURCE: https://typescript-book.com/discriminated-unions
+#   "Exhaustiveness checking with never ensures that when you add a new variant
+#   to a union, TypeScript forces you to handle it everywhere."
+# SOURCE: https://www.totaltypescript.com/exhaustive-switch
+#   "Every switch on a discriminated union should have a default that assigns
+#   the value to never for exhaustiveness checking."
+id: switch-must-be-exhaustive
+language: typescript
+message: "switch statement without exhaustiveness check — add default case with never assignment to catch missing cases"
+severity: warning
+note: |
+  UNSAFE:
+    function getStatusLabel(status: 'active' | 'inactive' | 'pending') {
+      switch (status) {
+        case 'active': return 'Active';
+        case 'inactive': return 'Inactive';
+        // Missing 'pending' — silently returns undefined
+      }
+    }
+  
+  SAFE:
+    function getStatusLabel(status: 'active' | 'inactive' | 'pending') {
+      switch (status) {
+        case 'active': return 'Active';
+        case 'inactive': return 'Inactive';
+        case 'pending': return 'Pending';
+        default: {
+          const exhaustive: never = status;
+          return exhaustive;
+        }
+      }
+    }
+  
+  WHY: Without exhaustiveness checking, adding a new variant to a union type causes
+  no compiler error at existing switch statements. The new case falls through to default
+  (or returns undefined) silently. The never assignment pattern makes TypeScript error
+  immediately when a new variant is added and not handled.
+rule:
+  pattern: |
+    switch ($EXPR) {
+      $$$CASES
+    }
+  not:
+    any:
+      # Safe: has a default case
+      - pattern: |
+          switch ($EXPR) {
+            $$$CASES
+            default:
+              $$$DEFAULT_BODY
+          }
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

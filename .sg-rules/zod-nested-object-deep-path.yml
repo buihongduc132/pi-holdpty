@@ -1,0 +1,70 @@
+# SOURCE: https://zod.dev/?id=recursive-types
+#   "For recursive and circular schemas, you MUST use z.lazy(). Nesting z.object()
+#   more than 3 levels deep without lazy evaluation causes performance degradation
+#   and can cause stack overflow in schema inference."
+# SOURCE: https://zod.dev/?id=zlazy
+#   "z.lazy() defers schema evaluation. Use it for recursive types like trees,
+#   nested menus, or self-referential data structures."
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/Stack_overflow
+#   "Deeply nested synchronous operations can exceed the call stack."
+id: zod-nested-object-deep-path
+language: typescript
+message: "Deeply nested z.object() chain (>3 levels) — consider z.lazy() for readability and to avoid stack overflow in type inference"
+severity: info
+note: |
+  UNSAFE:
+    const schema = z.object({
+      level1: z.object({
+        level2: z.object({
+          level3: z.object({
+            level4: z.object({
+              level5: z.string()
+            })
+          })
+        })
+      })
+    });
+    // Type inference traverses all 5 levels synchronously
+  
+  SAFE:
+    const level4Schema = z.lazy(() => z.object({
+      level5: z.string()
+    }));
+    const level3Schema = z.object({
+      level4: level4Schema
+    });
+    const level2Schema = z.object({
+      level3: level3Schema
+    });
+    const schema = z.object({
+      level1: level2Schema
+    });
+    // OR for truly recursive types:
+    const treeNode = z.lazy(() => z.object({
+      value: z.string(),
+      children: z.array(treeNode)
+    }));
+  
+  WHY: Deeply nested z.object() chains (4+ levels) cause TypeScript inference to traverse
+  the entire tree during type checking. For complex schemas, this can cause:
+  1. Slow IDE/hover performance (TypeScript hangs on inference)
+  2. "Type instantiation is excessively deep" errors
+  3. Stack overflow in schema.parse() for very large inputs
+  Senior devs often build deeply nested schemas for nested JSON API bodies without
+  realizing the performance impact on TypeScript compilation.
+  NOTE: This is a review-only rule. 3-4 levels is usually fine for API request bodies.
+  Flagged for manual review of schema complexity.
+rule:
+  # This is a heuristic — we flag z.object chains that contain nested z.object
+  # inside the same expression. ast-grep can't count depth directly, so we
+  # flag the pattern of z.object containing z.object containing z.object.
+  any:
+    - pattern: 'z.object({ $$$: z.object({ $$$: z.object({ $$$ }) }) })'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

@@ -1,0 +1,6 @@
+# ast-grep artifacts (managed by coding-guard deploy.sh)
+.sg-rules/
+.sg-sha
+sg-reports/
+# Generated distribution files are committed for Git URL installs.
+dist/

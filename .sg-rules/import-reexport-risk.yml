@@ -1,0 +1,9 @@
+id: import-reexport-risk
+language: typescript
+rule:
+  all:
+    - pattern: import { $ITEM } from '$SOURCE'
+    - has:
+        pattern: export { $$$ $ITEM $$$ }
+message: "Importing a symbol then immediately re-exporting it from the same file. This pattern often masks circular dependency chains during refactoring. Use 'export { $ITEM } from \"$SOURCE\"' directly or move shared logic to a lower layer."
+severity: warning

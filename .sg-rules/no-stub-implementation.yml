@@ -1,0 +1,44 @@
+# SOURCE: coding-guard internal — comprehensive stub/placeholder detection
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-4658/ (placeholder usage)
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-1155/ (empty/placeholder implementations)
+id: no-stub-implementation
+message: "Stub/placeholder/incomplete implementation detected — replace with real code"
+severity: error
+language: TypeScript
+note: |
+  Comprehensive anti-evasion stub detector.
+  
+  Keywords: stub, not yet implemented, deferred, work around, monkey patch,
+  placeholder, hack, temporary, fixme, wip, todo: implement, not implemented
+  
+  Contexts: throw Error (any subclass), console.log/warn/error/info/debug
+  
+  Evasion resistance:
+  - String concatenation: 'st' + 'ub' → caught via per-char gaps in $MSG text
+  - Template literals: `stub response` → caught via same regex
+  - Different Error types: TypeError/RangeError/etc → $ERR matches any class
+  
+  Note: does NOT match `return` statements to avoid false positives from
+  prose/template strings containing incidental keyword matches.
+rule:
+  any:
+    # ── throw patterns (any Error subclass) ──
+    - pattern: throw new $ERR($MSG)
+    # ── console patterns ──
+    - pattern: console.log($MSG)
+    - pattern: console.warn($MSG)
+    - pattern: console.error($MSG)
+    - pattern: console.info($MSG)
+    - pattern: console.debug($MSG)
+constraints:
+  MSG:
+    regex: '(?i)(s[\W_]{0,5}t[\W_]{0,5}u[\W_]{0,5}b|h[\W_]{0,5}a[\W_]{0,5}c[\W_]{0,5}k|w[\W_]{0,5}i[\W_]{0,5}p|not.{0,15}implement|deferred|work.?-?around|monkey.?-?patch|placeholder|temporary|fixme|todo.{0,20}implement)'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/scripts/**'
+  - '**/fixtures/**'

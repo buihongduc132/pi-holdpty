@@ -1,0 +1,33 @@
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse
+#   "JSON.parse() throws SyntaxError if the string is not valid JSON."
+# SOURCE: https://typescript-eslint.io/rules/no-unsafe-assignment/
+#   TypeScript ESLint: unvalidated external data is a security risk.
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-4715/
+#   SonarQube S4715: "JSON.parse should not be used without error handling."
+#
+# NOTE: framework/bun/safe-json-parse.yml covers this for Bun projects.
+# This rule covers the general TypeScript case (Node.js, Fastify, React).
+id: no-json-parse-without-trycatch
+language: typescript
+message: "JSON.parse without try/catch — throws SyntaxError on malformed input. Wrap in try/catch or use safeParse-style helper"
+severity: warning
+note: |
+  JSON.parse() is the only standard JSON parser in JS and it throws on any invalid input.
+  In server-side code, malformed JSON from external sources (request bodies, config files,
+  external APIs) will crash the handler. Wrap in try/catch with a descriptive error message.
+rule:
+  pattern: JSON.parse($ARG)
+  not:
+    inside:
+      kind: try_statement
+      has:
+        kind: catch_clause
+        stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

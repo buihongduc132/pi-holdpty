@@ -1,0 +1,34 @@
+# SOURCE: https://typescript-eslint.io/rules/no-explicit-any/
+#   @typescript-eslint/no-explicit-any: "Disallow the any type."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-4328/
+#   SonarQube S4328: "ANY type should not be used."
+# SOURCE: https://google.github.io/styleguide/tsguide.html#typescript
+#   Google TypeScript Style Guide: "Avoid using any."
+id: no-explicit-any
+language: TypeScript
+message: "Avoid explicit any — use a proper type, generic, or unknown"
+severity: warning
+note: "Mirrors @typescript-eslint/no-explicit-any and SonarQube S4328. any disables all type safety."
+rule:
+  any:
+    - pattern: $X as any
+    - kind: predefined_type
+      pattern: any
+      inside:
+        any:
+          - kind: type_annotation
+          - kind: type_arguments
+          - kind: as_expression
+          - kind: tuple_type
+          - kind: array_type
+          - kind: union_type
+          - kind: intersection_type
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'

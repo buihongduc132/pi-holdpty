@@ -1,0 +1,28 @@
+# SOURCE: https://ast-grep.github.io/catalog/typescript/#no-await-in-promise-all
+# Authored by: ast-grep (ast-grep/ast-grep), improved with stopBy + member-call exclusion
+# Intention: F08-dependency-gate-async
+id: no-await-in-promise-all
+language: TypeScript
+message: "Avoid await inside Promise.all — pass promises directly. Dependency gates (member calls) are allowed."
+severity: warning
+rule:
+  pattern: await $FUNC($$$ARGS)
+  inside:
+    pattern: Promise.all($_)
+    stopBy:
+      not: { any: [{kind: array}, {kind: arguments}] }
+constraints:
+  FUNC:
+    # Only flag simple identifier calls (await fetchA()).
+    # Member calls (await obj.method()) are ALLOWED — they represent dependency gates
+    # where the instance must be resolved before calling the method.
+    # See intention F08 for rationale.
+    kind: identifier
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

@@ -1,0 +1,28 @@
+# SOURCE: https://eslint.org/docs/latest/rules/no-eval
+#   ESLint no-eval: "Eliminate eval() and its counterparts."
+# SOURCE: https://rules.sonarsource.com/javascript/RSPEC-1528/
+#   SonarQube S1528: "eval" and "new Function" should not be used.
+# SOURCE: https://ast-grep.github.io/catalog/typescript/no-eval.html
+#   ast-grep catalog rule for eval detection.
+id: no-eval
+language: TypeScript
+message: "Avoid eval() / new Function() / setTimeout(string) / setInterval(string) — code injection risk"
+severity: error
+note: "Mirrors ESLint no-eval and SonarQube S1528. String arguments to setTimeout/setInterval act as eval."
+rule:
+  any:
+    - pattern: eval($$$ARGS)
+    - pattern: new Function($$$ARGS)
+    - pattern: setTimeout($STR, $$$)
+    - pattern: setInterval($STR, $$$)
+constraints:
+  STR:
+    kind: string
+    # Only match when first arg is a string literal (not a function reference)
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'

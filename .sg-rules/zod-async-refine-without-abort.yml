@@ -1,0 +1,62 @@
+# SOURCE: https://zod.dev/?id=async-refinements
+#   "Async refinements run on every parse call. If the async operation (e.g., DB lookup,
+#   HTTP call) is slow or the input is large, there's no built-in timeout or abort mechanism."
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/API/AbortController
+#   "Long-running async operations should support AbortController for cancellation."
+# SOURCE: https://zod.dev/?id=refine
+#   "refine does not accept an AbortSignal. For async validation, wrap in a timeout
+#   or race with Promise.race to prevent hanging."
+id: zod-async-refine-without-abort
+language: typescript
+message: "async refine() without timeout/abort — slow external call can hang validation indefinitely. Wrap in Promise.race with timeout"
+severity: warning
+note: |
+  UNSAFE:
+    z.string().refine(async (id) => {
+      const user = await db.user.findUnique({ where: { id } });  // no timeout
+      return user !== null;
+    });
+    // If DB is slow, every request hangs indefinitely
+  
+  SAFE:
+    z.string().refine(async (id) => {
+      const user = await Promise.race([
+        db.user.findUnique({ where: { id } }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+      ]);
+      return user !== null;
+    });
+    // OR use AbortController:
+    z.string().refine(async (id) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`/api/users/${id}`, { signal: controller.signal });
+      return res.ok;
+    });
+  
+  WHY: Async refine callbacks that call databases or external APIs have no built-in timeout.
+  If the external dependency is slow or down, every validation call hangs, blocking the
+  event loop and eventually causing request timeouts at the server level (usually 30-60s).
+  Senior devs often add async refinements for "check if exists" without considering
+  the failure mode of the external call.
+rule:
+  any:
+    - pattern: $SCHEMA.refine(async ($$$) => { $$$ })
+    - pattern: $SCHEMA.refine(async ($$$) => $EXPR)
+  not:
+    any:
+      # Safe: wrapped in Promise.race (has timeout)
+      - pattern: $SCHEMA.refine(async ($$$) => { Promise.race($$$) $$$ })
+      # Safe: uses AbortController
+      - pattern: $SCHEMA.refine(async ($$$) => { $$$ AbortController $$$ })
+constraints:
+  SCHEMA:
+    regex: 'z\\..+|[A-Za-z]+'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

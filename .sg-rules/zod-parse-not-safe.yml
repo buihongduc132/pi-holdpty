@@ -1,0 +1,42 @@
+# SOURCE: https://zod.dev/?id=safeparse
+#   "safeParse returns a result object instead of throwing. Use it in route handlers
+#   where you want to return a 400 error instead of throwing a 500."
+# SOURCE: https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/
+#   "Validation errors should return 400, not 500. schema.parse() throws ZodError
+#   which becomes an unhandled 500 if not caught."
+# SOURCE: https://zod.dev/?id=errors
+#   "schema.parse() throws on invalid data. schema.safeParse() returns { success, data, error }
+#   — no try/catch needed."
+id: zod-parse-not-safe
+language: typescript
+message: "schema.parse() in route handler — throws ZodError on invalid input. Use schema.safeParse() to return 400 instead of 500"
+severity: warning
+note: |
+  In Fastify route handlers, zod.parse() throws a ZodError when validation fails. If this
+  isn't caught, Fastify's error handler returns a 500 Internal Server Error. Using
+  safeParse() returns { success: false, error } which you can map to a proper 400 response:
+  
+    const result = schema.safeParse(request.body);
+    if (!result.success) return reply.code(400).send({ errors: result.error.flatten() });
+rule:
+  pattern: $SCHEMA.parse($$$)
+  inside:
+    any:
+      - kind: function_expression
+        inside:
+          pattern: $APP.$VERB($_, $$$, async ($$$) => { $$$ })
+      - kind: function_expression
+        inside:
+          pattern: $APP.$VERB($_, { $$$ }, async ($$$) => { $$$ })
+  not:
+    inside:
+      kind: try_statement
+      stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

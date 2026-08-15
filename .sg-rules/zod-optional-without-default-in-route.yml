@@ -1,0 +1,50 @@
+# SOURCE: https://zod.dev/?id=optional
+#   "Optional fields accept undefined. In route validation, an optional field without
+#   a default means downstream code must handle undefined at every usage site."
+# SOURCE: https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/
+#   "Request body fields that are optional should have sensible defaults to avoid
+#   undefined checks scattered across business logic."
+# SOURCE: https://zod.dev/?id=default
+#   "Use .default() to provide fallback values. This ensures the parsed output always
+#   has a concrete value, eliminating undefined handling downstream."
+id: zod-optional-without-default-in-route
+language: typescript
+message: "optional() field without default() in route body schema — downstream code must handle undefined. Add .default() for explicit fallback"
+severity: info
+note: |
+  UNSAFE:
+    const bodySchema = z.object({
+      page: z.number().optional(),         // undefined if not sent
+      sort: z.string().optional(),         // every usage: sort ?? 'createdAt'
+      limit: z.number().optional(),
+    });
+  
+  SAFE:
+    const bodySchema = z.object({
+      page: z.number().default(1),
+      sort: z.string().default('createdAt'),
+      limit: z.number().default(20),
+    });
+    // Now body.page is always number, no undefined checks needed
+  
+  WHY: When a field is optional() without default(), every usage site must guard against
+  undefined. This scatters null checks throughout business logic and is a frequent source
+  of TypeError crashes. Using default() centralizes the fallback value in the schema,
+  which is the single source of truth for input shape.
+  NOTE: Review-only. Some fields (e.g., filters) are legitimately optional with no default.
+rule:
+  any:
+    - pattern: $FIELD.optional()
+    - pattern: $FIELD.nullable().optional()
+  inside:
+    any:
+      - pattern: z.object({ $$$ })
+      - pattern: z.object({ $$$ }).$$$REST
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'

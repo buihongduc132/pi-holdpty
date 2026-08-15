@@ -1,0 +1,57 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions
+#   "Use discriminated unions instead of optional properties. They make state
+#   transitions explicit and prevent impossible states."
+# SOURCE: https://kentcdodds.com/blog/make-impossible-states-impossible
+#   "Design types that make invalid states unrepresentable. Use discriminated
+#   unions, not loosely overlapping optional fields."
+# SOURCE: https://github.com/gcanti/io-ts/blob/master/README.md
+#   "Runtime type validation + discriminated unions = total type safety."
+id: no-any-in-generic-args
+language: typescript
+message: "Generic type instantiated with 'any' — use concrete type, unknown, or generic parameter instead. 'any' in generics bypasses all type checking"
+severity: error
+note: |
+  UNSAFE:
+    const items: Array<any> = [];
+    const map: Map<string, any> = new Map();
+    const record: Record<string, any> = {};
+    function parse<T>(input: any): T { ... }
+  
+  SAFE:
+    const items: Array<User> = [];
+    const map: Map<string, User> = new Map();
+    const record: Record<string, User> = {};
+    function parse<T>(input: unknown): T { ... }
+    
+    // If you genuinely don't know the type:
+    const items: Array<unknown> = [];
+    const record: Record<string, unknown> = {};
+  
+  WHY: `any` inside generic type arguments (Array<any>, Map<K, any>, Record<string, any>)
+  creates containers that accept anything and provide no type information on retrieval.
+  This is worse than top-level any because it's hidden inside the generic — you think
+  you have a typed container but it's actually untyped. Use `unknown` if the type is
+  genuinely unknown, or concrete types if known.
+rule:
+  any:
+    - pattern: Array<any>
+    - pattern: Map<any, any>
+    - pattern: Map<$KEY, any>
+    - pattern: Map<any, $VAL>
+    - pattern: 'Record<string, any>'
+    - pattern: 'Record<$KEY, any>'
+    - pattern: Set<any>
+    - pattern: Promise<any>
+    - pattern: ReadonlyArray<any>
+    - pattern: Partial<any>
+    - pattern: Required<any>
+    - pattern: Readonly<any>
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'

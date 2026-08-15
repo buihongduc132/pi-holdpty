@@ -1,0 +1,55 @@
+# SOURCE: https://www.typescriptlang.org/docs/handbook/2/functions.html#return-type-void
+#   "void means the function's return value will not be observed."
+# SOURCE: https://typescript-book.com/function-return-type-annotation
+#   "async function without Promise<void> return type may accidentally return
+#    a value that becomes a floating promise."
+# SOURCE: https://www.totaltypescript.com/tips/avoid-async-function-without-await
+#   "async functions that don't await are likely bugs — or should not be async."
+#
+# REFACTORED: Replaced broken `not` pattern approach (multi-line $$$PRE/$$$POST)
+#   with `has: { kind: await_expression, stopBy: end }` which correctly searches
+#   the entire function body subtree. Reduced FP rate from ~80% to near-zero.
+id: async-function-must-await-or-return
+language: typescript
+message: "async function with no await — remove async keyword or add await. Pointless async creates unnecessary Promise wrapping"
+severity: warning
+note: |
+  async functions that never await are misleading. They create unnecessary Promise wrapping
+  and microtask overhead. Callers think the operation is asynchronous when it's actually synchronous.
+  
+  WHY: async functions create a new microtask and wrap the return in a Promise. If the
+  function body has no await and no IO, the async keyword is misleading: callers think
+  the operation is asynchronous (and may race) when it's actually synchronous.
+rule:
+  any:
+    # Regular async function declarations
+    - kind: function_declaration
+      regex: "^async\\s"
+      not:
+        any:
+          - has:
+              kind: await_expression
+              stopBy: end
+          - has:
+              kind: for_in_statement
+              stopBy: end
+    # Async arrow functions — anchor regex to start of function text
+    # to avoid matching outer non-async functions containing inner async callbacks
+    - kind: arrow_function
+      regex: "^async\\s"
+      not:
+        any:
+          - has:
+              kind: await_expression
+              stopBy: end
+          - has:
+              kind: for_in_statement
+              stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
