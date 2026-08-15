@@ -31,7 +31,7 @@ const ROOT = resolve(__dirname, "..");
 
 // Use compiled dist output — src/*.ts imports use .js extensions (ESM convention)
 // which --experimental-strip-types cannot resolve. Build first: npm run build.
-const CLI = resolve(ROOT, "dist", "src", "cli.js");
+const CLI = resolve(ROOT, "dist", "cli.js");
 const NODE = process.execPath;
 const NODE_FLAGS: string[] = [];
 
