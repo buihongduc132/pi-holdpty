@@ -102,7 +102,6 @@
     "version-packages": "changeset version",
     "release": "changeset publish",
     "smoke-test": "npm run build && node --experimental-strip-types --no-warnings scripts/smoke-test.ts",
-    "prepare": "tsc",
     "prepublishOnly": "npm run lint && npm run test"
   },
   "dependencies": {

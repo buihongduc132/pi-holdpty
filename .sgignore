@@ -2,3 +2,5 @@
 .sg-rules/
 .sg-sha
 sg-reports/
+# Generated distribution files are committed for Git URL installs.
+dist/

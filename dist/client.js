@@ -1,0 +1,357 @@
+/**
+ * Client connections: attach, view, logs.
+ *
+ * Connects to a holder process over a Unix domain socket.
+ */
+import { createConnection } from "node:net";
+import { getSessionDir, socketPath } from "./platform.js";
+import { readMetadata } from "./session.js";
+import { MSG, FrameDecoder, encodeHello, encodeDataIn, encodeResize, decodeHelloAck, decodeExit, decodeError, } from "./protocol.js";
+import { TailBuffer } from "./line-filter.js";
+// ── Connect ────────────────────────────────────────────────────────
+/**
+ * Connect to a session. Performs the HELLO handshake and buffer replay.
+ */
+export function connect(opts) {
+    const { name, mode } = opts;
+    const dir = getSessionDir();
+    const sockPath = socketPath(dir, name);
+    // Pre-check: does the session exist?
+    const meta = readMetadata(name);
+    if (!meta) {
+        return Promise.reject(new Error(`Session "${name}" not found`));
+    }
+    return new Promise((resolve, reject) => {
+        const socket = createConnection(sockPath, () => {
+            // Send HELLO
+            socket.write(encodeHello({ mode, protocolVersion: 1 }));
+        });
+        const decoder = new FrameDecoder();
+        let ack = null;
+        let resolved = false;
+        let replayDone = false;
+        // done promise: resolves when connection ends
+        let resolveDone;
+        const done = new Promise((r) => {
+            resolveDone = r;
+        });
+        const onData = (chunk) => {
+            let frames;
+            try {
+                frames = decoder.decode(chunk);
+            }
+            catch {
+                if (!resolved) {
+                    resolved = true;
+                    reject(new Error("Malformed data from holder"));
+                }
+                return;
+            }
+            for (const frame of frames) {
+                switch (frame.type) {
+                    case MSG.HELLO_ACK:
+                        ack = decodeHelloAck(frame.payload);
+                        break;
+                    case MSG.ERROR: {
+                        const msg = decodeError(frame.payload);
+                        if (!resolved) {
+                            resolved = true;
+                            reject(new Error(msg));
+                        }
+                        break;
+                    }
+                    case MSG.DATA_OUT:
+                        if (mode === "wait")
+                            break; // wait mode: suppress all output
+                        if (!replayDone && opts.onReplayData) {
+                            // During replay with a custom handler — delegate to caller
+                            opts.onReplayData(frame.payload);
+                        }
+                        else {
+                            process.stdout.write(frame.payload);
+                        }
+                        break;
+                    case MSG.REPLAY_END:
+                        // Must flip synchronously before processing any further frames
+                        // in this batch (a live DATA_OUT may follow in the same chunk)
+                        replayDone = true;
+                        if (opts.onReplayEnd) {
+                            opts.onReplayEnd();
+                        }
+                        if (!resolved && ack) {
+                            resolved = true;
+                            // For attach mode: remove this handler so attach() can install
+                            // its own without double-writing. view/logs keep this handler.
+                            if (mode === "attach") {
+                                socket.removeListener("data", onData);
+                            }
+                            resolve({ socket, ack, done });
+                        }
+                        break;
+                    case MSG.EXIT: {
+                        const { code } = decodeExit(frame.payload);
+                        resolveDone(code);
+                        break;
+                    }
+                    default:
+                        // Unknown — ignore
+                        break;
+                }
+            }
+        };
+        socket.on("data", onData);
+        socket.on("error", (err) => {
+            // Release the fd explicitly; don't rely solely on Node's auto-destroy.
+            socket.destroy();
+            if (!resolved) {
+                resolved = true;
+                reject(new Error(`Cannot connect to session "${name}": ${err.message}`));
+            }
+            resolveDone(null);
+        });
+        socket.on("close", () => {
+            if (!resolved) {
+                resolved = true;
+                reject(new Error(`Connection to "${name}" closed during handshake`));
+            }
+            resolveDone(null);
+        });
+    });
+}
+// ── Attach ─────────────────────────────────────────────────────────
+/** Default detach sequence: Ctrl+A then d (screen convention) */
+const DEFAULT_DETACH_SEQ = [0x01, 0x64]; // Ctrl+A = 0x01, d = 0x64
+/**
+ * Parse the HOLDPTY_DETACH env var into a byte sequence.
+ * Format: comma-separated hex bytes, e.g. "0x01,0x64"
+ */
+function parseDetachSequence() {
+    const raw = process.env["HOLDPTY_DETACH"];
+    if (!raw)
+        return DEFAULT_DETACH_SEQ;
+    try {
+        const bytes = raw.split(",").map((s) => {
+            const n = parseInt(s.trim(), 16);
+            if (isNaN(n) || n < 0 || n > 255)
+                throw new Error();
+            return n;
+        });
+        if (bytes.length < 1)
+            return DEFAULT_DETACH_SEQ;
+        return bytes;
+    }
+    catch {
+        return DEFAULT_DETACH_SEQ;
+    }
+}
+/**
+ * Attach to a session interactively.
+ * Takes over the terminal (raw mode). Returns exit code or null (detach).
+ */
+export async function attach(opts) {
+    const conn = await connect({ name: opts.name, mode: "attach" });
+    const { socket, ack, done } = conn;
+    // Replay data was already handled during connect
+    // Now set up live streaming
+    // Write live data to stdout
+    const decoder = new FrameDecoder();
+    let exitCode = null;
+    let detached = false;
+    socket.on("data", (chunk) => {
+        let frames;
+        try {
+            frames = decoder.decode(chunk);
+        }
+        catch {
+            return;
+        }
+        for (const frame of frames) {
+            if (frame.type === MSG.DATA_OUT) {
+                process.stdout.write(frame.payload);
+            }
+            else if (frame.type === MSG.EXIT) {
+                exitCode = decodeExit(frame.payload).code;
+            }
+        }
+    });
+    // Enter raw mode
+    if (!process.stdin.isTTY) {
+        throw new Error("attach requires a TTY (interactive terminal)");
+    }
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    // Detach sequence detection (screen-style: no timeout)
+    //
+    // The prefix byte (Ctrl+A by default) enters "command mode".
+    // The next byte decides: if it completes the sequence → detach.
+    // If anything else → flush the prefix + the byte to the PTY.
+    // To send a literal prefix byte, press it twice (Ctrl+A Ctrl+A).
+    const detachSeq = parseDetachSequence();
+    let detachIdx = 0;
+    const onStdinData = (data) => {
+        // Fast path: not in command mode and prefix byte not in this chunk
+        if (detachIdx === 0 && !data.includes(detachSeq[0])) {
+            socket.write(encodeDataIn(data));
+            return;
+        }
+        // Slow path: byte-by-byte scan for detach sequence
+        let batchStart = -1; // start of a run of normal bytes to batch-send
+        const flushBatch = (end) => {
+            if (batchStart >= 0 && end > batchStart) {
+                socket.write(encodeDataIn(data.subarray(batchStart, end)));
+                batchStart = -1;
+            }
+        };
+        for (let i = 0; i < data.length; i++) {
+            const byte = data[i];
+            if (detachIdx > 0 && byte === detachSeq[detachIdx]) {
+                // Continuing the sequence
+                flushBatch(i);
+                detachIdx++;
+                if (detachIdx === detachSeq.length) {
+                    detached = true;
+                    cleanup();
+                    return;
+                }
+            }
+            else if (detachIdx === 0 && byte === detachSeq[0]) {
+                // Prefix byte — enter command mode, swallow it
+                flushBatch(i);
+                detachIdx = 1;
+            }
+            else if (detachIdx > 0) {
+                // In command mode but wrong byte — flush prefix + resume normal
+                flushBatch(i);
+                if (detachIdx === 1 && byte === detachSeq[0]) {
+                    // Double prefix (e.g., Ctrl+A Ctrl+A) → send one literal prefix
+                    socket.write(encodeDataIn(Buffer.from([detachSeq[0]])));
+                }
+                else {
+                    // Send the swallowed prefix bytes + this byte
+                    const flushed = Buffer.from([...detachSeq.slice(0, detachIdx), byte]);
+                    socket.write(encodeDataIn(flushed));
+                }
+                detachIdx = 0;
+            }
+            else {
+                // Normal byte — batch it
+                if (batchStart < 0)
+                    batchStart = i;
+            }
+        }
+        // Flush any trailing normal bytes
+        flushBatch(data.length);
+    };
+    // Send resize on terminal size change
+    const onResize = () => {
+        if (process.stdout.columns && process.stdout.rows) {
+            socket.write(encodeResize(process.stdout.columns, process.stdout.rows));
+        }
+    };
+    process.stdin.on("data", onStdinData);
+    process.stdout.on("resize", onResize);
+    // Send initial resize
+    onResize();
+    const cleanup = () => {
+        process.stdin.removeListener("data", onStdinData);
+        process.stdout.removeListener("resize", onResize);
+        try {
+            process.stdin.setRawMode(false);
+            process.stdin.pause();
+        }
+        catch {
+            // May fail if stdin is already closed
+        }
+        socket.end();
+    };
+    // Wait for connection to end
+    const code = await done;
+    if (!detached) {
+        cleanup();
+        return code ?? exitCode;
+    }
+    return null; // Detached
+}
+/**
+ * View a session (read-only live stream).
+ * Writes PTY data to stdout. Returns when the session ends.
+ *
+ * Data output (both replay and live) is handled by connect()'s data listener.
+ */
+export async function view(opts) {
+    const conn = await connect({ name: opts.name, mode: "view" });
+    await conn.done;
+}
+/**
+ * Dump the session's output buffer to stdout and exit.
+ * With --follow, keeps streaming live data after replay.
+ * With --tail N, only shows the last N lines of replay.
+ * With --no-replay, skips buffer replay (only valid with --follow).
+ */
+export async function logs(opts) {
+    const { tail, follow, noReplay } = opts;
+    // --follow uses "view" mode (holder keeps connection open after REPLAY_END)
+    // Without --follow, use "logs" mode (holder disconnects after REPLAY_END)
+    const mode = follow ? "view" : "logs";
+    // Build replay callbacks based on options
+    let onReplayData;
+    let onReplayEnd;
+    if (noReplay) {
+        // Skip all replay data
+        onReplayData = () => { };
+    }
+    else if (tail != null) {
+        // Buffer replay, flush last N lines on REPLAY_END
+        const tailBuf = new TailBuffer();
+        onReplayData = (payload) => tailBuf.push(payload);
+        onReplayEnd = () => {
+            const data = tailBuf.flush(tail);
+            if (data.length > 0) {
+                process.stdout.write(data);
+            }
+        };
+    }
+    // else: default behavior — write replay data directly to stdout
+    const conn = await connect({
+        name: opts.name,
+        mode,
+        onReplayData,
+        onReplayEnd,
+    });
+    if (follow) {
+        // Wait for session to end (live streaming handled by connect's DATA_OUT handler)
+        await conn.done;
+    }
+    // Without --follow in logs mode, holder disconnects after REPLAY_END
+}
+/**
+ * Send input to a session without attaching.
+ *
+ * Unlike attach, send mode does NOT take an exclusive writer lock — multiple
+ * senders and an attached client can coexist. The data is written to the PTY
+ * and the connection is closed immediately.
+ *
+ * This is the programmatic equivalent of typing into the terminal.
+ */
+export async function send(opts) {
+    const conn = await connect({ name: opts.name, mode: "send" });
+    conn.socket.write(encodeDataIn(opts.data));
+    // Holder closes the connection after processing DATA_IN in send mode,
+    // so we just wait for the socket to close rather than guessing a timeout.
+    await new Promise((resolve) => {
+        conn.socket.on("close", resolve);
+    });
+}
+/**
+ * Connect to an existing session, wait for the inner process to exit,
+ * and return its exit code. No PTY output is written to stdout.
+ *
+ * This is the network-level primitive used by both `holdpty wait <session>`
+ * and the `--wait` flag on `holdpty launch`.
+ */
+export async function waitForExit(opts) {
+    const conn = await connect({ name: opts.name, mode: "wait" });
+    const code = await conn.done;
+    return code ?? -1;
+}
+//# sourceMappingURL=client.js.map
