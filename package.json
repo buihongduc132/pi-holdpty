@@ -82,6 +82,7 @@
     "dist/staleness.js",
     "dist/staleness.js.map",
     "dist/staleness.d.ts",
+    "scripts/fix-node-pty-permissions.js",
     "extensions/",
     "skills/",
     ".well-known/",
@@ -102,6 +103,7 @@
     "version-packages": "changeset version",
     "release": "changeset publish",
     "smoke-test": "npm run build && node --experimental-strip-types --no-warnings scripts/smoke-test.ts",
+    "postinstall": "node scripts/fix-node-pty-permissions.js",
     "prepublishOnly": "npm run lint && npm run test"
   },
   "dependencies": {
